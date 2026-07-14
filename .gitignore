@@ -16,6 +16,10 @@ dist-ssr
 .venv
 __pycache__
 
+# Source dog photos are local-only — only their processed cutouts
+# (src/assets/dogs/cutouts/) are committed.
+src/assets/dogs/*.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
