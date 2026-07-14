@@ -48,7 +48,10 @@ export default function Grid({
   return (
     <div
       className="grid"
-      style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}
+      style={{
+        gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
+        gridTemplateRows: `repeat(${GRID_SIZE}, 1fr)`,
+      }}
     >
       {marks.map((rowMarks, row) =>
         rowMarks.map((mark, col) => (
