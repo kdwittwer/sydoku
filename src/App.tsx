@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import Grid from './components/Grid';
 import { pickRandomDogImage } from './game/dogImages';
-import { generatePuzzle } from './game/generator';
+import { requestPuzzle } from './game/generatorClient';
 import { createEmptyDogImages, createEmptyMarks, findConflicts, isWon } from './game/logic';
 import { GRID_SIZE } from './game/types';
 import type { CellMark, Puzzle } from './game/types';
@@ -10,21 +10,25 @@ import type { CellMark, Puzzle } from './game/types';
 const NEW_PUZZLE_DELAY_MS = 1800;
 
 export default function App() {
-  const [puzzle, setPuzzle] = useState<Puzzle>(() => generatePuzzle());
+  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [marks, setMarks] = useState<CellMark[][]>(() => createEmptyMarks());
   const [dogImages, setDogImages] = useState<(string | null)[][]>(() => createEmptyDogImages());
+  const [isGenerating, setIsGenerating] = useState(true);
   // Snapshot of marks taken the moment "Check Dogs" was last pressed. Kept
   // separate from `marks` so a wrong-dog flag can disappear the instant the
   // user edits that specific cell (see `incorrect` below), without turning
   // this into live validation of every dog the moment it's placed.
   const [checkedSnapshot, setCheckedSnapshot] = useState<CellMark[][] | null>(null);
 
-  const conflicts = useMemo(() => findConflicts(puzzle, marks), [puzzle, marks]);
-  const won = useMemo(() => isWon(puzzle, marks), [puzzle, marks]);
+  const conflicts = useMemo(() => {
+    if (puzzle) return findConflicts(puzzle, marks);
+    return Array.from({ length: GRID_SIZE }, () => new Array(GRID_SIZE).fill(false));
+  }, [puzzle, marks]);
+  const won = useMemo(() => (puzzle ? isWon(puzzle, marks) : false), [puzzle, marks]);
 
   const incorrect = useMemo(() => {
     const grid = Array.from({ length: GRID_SIZE }, () => new Array(GRID_SIZE).fill(false));
-    if (!checkedSnapshot) return grid;
+    if (!checkedSnapshot || !puzzle) return grid;
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
         // Only still-flagged if the cell was dog-marked at check time AND
@@ -46,16 +50,25 @@ export default function App() {
     [marks]
   );
 
+  const loadPuzzle = useCallback(async () => {
+    setIsGenerating(true);
+    const next = await requestPuzzle();
+    setPuzzle(next);
+    setMarks(createEmptyMarks());
+    setDogImages(createEmptyDogImages());
+    setCheckedSnapshot(null);
+    setIsGenerating(false);
+  }, []);
+
+  useEffect(() => {
+    loadPuzzle();
+  }, [loadPuzzle]);
+
   useEffect(() => {
     if (!won) return;
-    const timer = window.setTimeout(() => {
-      setPuzzle(generatePuzzle());
-      setMarks(createEmptyMarks());
-      setDogImages(createEmptyDogImages());
-      setCheckedSnapshot(null);
-    }, NEW_PUZZLE_DELAY_MS);
+    const timer = window.setTimeout(loadPuzzle, NEW_PUZZLE_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [won]);
+  }, [won, loadPuzzle]);
 
   const toggleSafe = useCallback((row: number, col: number) => {
     setMarks((prev) => {
@@ -91,13 +104,6 @@ export default function App() {
     });
   }, []);
 
-  const handleNewPuzzle = useCallback(() => {
-    setPuzzle(generatePuzzle());
-    setMarks(createEmptyMarks());
-    setDogImages(createEmptyDogImages());
-    setCheckedSnapshot(null);
-  }, []);
-
   const handleCheckDogs = useCallback(() => {
     setCheckedSnapshot(marks.map((row) => [...row]));
   }, [marks]);
@@ -107,23 +113,31 @@ export default function App() {
       <header className="app__header">
         <h1>Sydoku</h1>
         <p>
-          Find all 10 dogs. One per row, one per column, none touching &mdash; and exactly one
-          per colored section. Click a cell to mark it safe, double-click to flag a dog. Click and
-          drag to mark a whole swath at once.
+          Find all 10 dogs — one per row, column, and section. Click for safe, double-click for
+          dog, drag to mark many at once.
         </p>
       </header>
 
-      <Grid
-        puzzle={puzzle}
-        marks={marks}
-        dogImages={dogImages}
-        conflicts={conflicts}
-        incorrect={incorrect}
-        disabled={won}
-        onToggleSafe={toggleSafe}
-        onToggleDog={toggleDog}
-        onSetMark={setMark}
-      />
+      <div className="app__board">
+        {puzzle && !isGenerating ? (
+          <Grid
+            puzzle={puzzle}
+            marks={marks}
+            dogImages={dogImages}
+            conflicts={conflicts}
+            incorrect={incorrect}
+            disabled={won}
+            onToggleSafe={toggleSafe}
+            onToggleDog={toggleDog}
+            onSetMark={setMark}
+          />
+        ) : (
+          <div className="app__loading" role="status" aria-live="polite">
+            <div className="app__spinner" />
+            <p>Generating puzzle&hellip;</p>
+          </div>
+        )}
+      </div>
 
       <div className="app__footer">
         {won ? (
@@ -131,10 +145,20 @@ export default function App() {
         ) : (
           <>
             <div className="app__actions">
-              <button type="button" className="app__button" onClick={handleCheckDogs}>
+              <button
+                type="button"
+                className="app__button"
+                onClick={handleCheckDogs}
+                disabled={isGenerating}
+              >
                 Check dogs
               </button>
-              <button type="button" className="app__button" onClick={handleNewPuzzle}>
+              <button
+                type="button"
+                className="app__button"
+                onClick={loadPuzzle}
+                disabled={isGenerating}
+              >
                 New puzzle
               </button>
             </div>
