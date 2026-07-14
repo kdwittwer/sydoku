@@ -1,4 +1,5 @@
 import { DOG_COUNT, GRID_SIZE, type Position, type Puzzle } from './types';
+import { solveLogically } from './solver';
 
 function shuffled<T>(items: T[]): T[] {
   const arr = [...items];
@@ -51,68 +52,196 @@ const ORTHOGONAL_NEIGHBORS = [
 ];
 
 /**
- * Grows DOG_COUNT connected regions outward from each dog cell (multi-source
- * random flood fill) until every cell on the grid belongs to exactly one
- * region.
+ * Every valid dog placement (row/column-distinct, no touching) with the
+ * region constraint ignored entirely. This depends only on GRID_SIZE, so
+ * it's computed once and memoized — recomputing it per puzzle would dwarf
+ * everything else in generatePuzzle.
  */
-function generateRegions(dogCols: number[]): number[][] {
+let cachedPlacements: number[][] | null = null;
+function allValidPlacements(): number[][] {
+  if (cachedPlacements) return cachedPlacements;
+
+  const results: number[][] = [];
+  const usedCols = new Array(GRID_SIZE).fill(false);
+  const placedInRow = new Array(GRID_SIZE).fill(-1);
+
+  function backtrack(row: number) {
+    if (row === GRID_SIZE) {
+      results.push([...placedInRow]);
+      return;
+    }
+    for (let col = 0; col < GRID_SIZE; col++) {
+      if (usedCols[col]) continue;
+      if (row > 0 && Math.abs(placedInRow[row - 1] - col) < 2) continue;
+      usedCols[col] = true;
+      placedInRow[row] = col;
+      backtrack(row + 1);
+      usedCols[col] = false;
+    }
+  }
+  backtrack(0);
+
+  cachedPlacements = results;
+  return results;
+}
+
+/**
+ * Grows DOG_COUNT connected regions outward from each dog cell. At every
+ * step, among all cells bordering an existing region, it assigns whichever
+ * (cell, region) pairing invalidates the most competing placements — every
+ * valid row/column/no-touch placement other than the true solution that
+ * could still end up with exactly one dog per region.
+ *
+ * A pairing invalidates a competing placement P' as soon as two of P''s
+ * dogs share a region, which can only ever become true as more cells are
+ * assigned (never false again), and the true solution's own 10 dog cells
+ * are already claimed as seeds before growth starts, so it's never at risk.
+ * That means growth only ever narrows the field of alternative solutions,
+ * and by the time the grid is fully partitioned, almost every puzzle has
+ * exactly one valid solution left. generatePuzzle() verifies this (and
+ * that it's reachable by pure deduction) and retries on the rare puzzle
+ * that isn't.
+ */
+function buildGreedyRegions(dogCols: number[]): number[][] {
   const regions: number[][] = Array.from({ length: GRID_SIZE }, () =>
     new Array(GRID_SIZE).fill(-1)
   );
-  const frontiers: Position[][] = Array.from({ length: DOG_COUNT }, () => []);
+  dogCols.forEach((col, row) => {
+    regions[row][col] = row;
+  });
 
-  const addNeighborsToFrontier = (row: number, col: number, region: number) => {
+  const buildIndexLists: number[][][] = Array.from({ length: GRID_SIZE }, () =>
+    Array.from({ length: GRID_SIZE }, () => [] as number[])
+  );
+  const alternates: number[][] = [];
+  for (const placement of allValidPlacements()) {
+    let isTrueSolution = true;
+    for (let r = 0; r < GRID_SIZE; r++) {
+      if (placement[r] !== dogCols[r]) {
+        isTrueSolution = false;
+        break;
+      }
+    }
+    if (isTrueSolution) continue;
+    const ai = alternates.length;
+    alternates.push(placement);
+    for (let r = 0; r < GRID_SIZE; r++) buildIndexLists[r][placement[r]].push(ai);
+  }
+  const buildIndex = buildIndexLists.map((row) => row.map((list) => Int32Array.from(list)));
+
+  const alive = new Uint8Array(alternates.length).fill(1);
+  const counts = new Uint8Array(alternates.length * DOG_COUNT);
+  const bumpCount = (alternateIndex: number, region: number) => {
+    const idx = alternateIndex * DOG_COUNT + region;
+    counts[idx]++;
+    if (counts[idx] >= 2) alive[alternateIndex] = 0;
+  };
+
+  dogCols.forEach((col, row) => {
+    for (const alternateIndex of buildIndex[row][col]) bumpCount(alternateIndex, row);
+  });
+
+  // Frontier: unclaimed cell -> set of regions currently bordering it.
+  const frontier = new Map<number, Set<number>>();
+  const addFrontier = (row: number, col: number, region: number) => {
     for (const [dr, dc] of ORTHOGONAL_NEIGHBORS) {
       const r = row + dr;
       const c = col + dc;
       if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE && regions[r][c] === -1) {
-        frontiers[region].push({ row: r, col: c });
+        const key = r * GRID_SIZE + c;
+        let set = frontier.get(key);
+        if (!set) {
+          set = new Set();
+          frontier.set(key, set);
+        }
+        set.add(region);
       }
     }
   };
-
-  dogCols.forEach((col, row) => {
-    regions[row][col] = row;
-    addNeighborsToFrontier(row, col, row);
-  });
+  dogCols.forEach((col, row) => addFrontier(row, col, row));
 
   let remaining = GRID_SIZE * GRID_SIZE - DOG_COUNT;
-  while (remaining > 0) {
-    const activeRegions = Array.from({ length: DOG_COUNT }, (_, i) => i).filter(
-      (i) => frontiers[i].length > 0
-    );
-    if (activeRegions.length === 0) {
-      // Shouldn't happen on a fully connected grid, but guard against infinite loops.
-      break;
+  while (remaining > 0 && frontier.size > 0) {
+    let bestKey = -1;
+    let bestRegion = -1;
+    let bestKills = -1;
+    for (const [key, regionSet] of frontier) {
+      const r = Math.floor(key / GRID_SIZE);
+      const c = key % GRID_SIZE;
+      const cellAlternates = buildIndex[r][c];
+      for (const region of regionSet) {
+        let kills = 0;
+        for (let i = 0; i < cellAlternates.length; i++) {
+          const alternateIndex = cellAlternates[i];
+          if (alive[alternateIndex] && counts[alternateIndex * DOG_COUNT + region] >= 1) kills++;
+        }
+        if (kills > bestKills) {
+          bestKills = kills;
+          bestKey = key;
+          bestRegion = region;
+        }
+      }
     }
 
-    // Pop a random cell from a random active region's frontier. A single pop
-    // per iteration (rather than one-per-region-per-round) avoids stalling
-    // out when every active region's pick happens to already be claimed.
-    const region = activeRegions[Math.floor(Math.random() * activeRegions.length)];
-    const frontier = frontiers[region];
-    const idx = Math.floor(Math.random() * frontier.length);
-    const { row, col } = frontier[idx];
-    frontier.splice(idx, 1);
-    if (regions[row][col] !== -1) continue; // claimed by another region already
-    regions[row][col] = region;
-    addNeighborsToFrontier(row, col, region);
+    const r = Math.floor(bestKey / GRID_SIZE);
+    const c = bestKey % GRID_SIZE;
+    regions[r][c] = bestRegion;
+    frontier.delete(bestKey);
     remaining--;
+    addFrontier(r, c, bestRegion);
+    for (const alternateIndex of buildIndex[r][c]) {
+      if (alive[alternateIndex]) bumpCount(alternateIndex, bestRegion);
+    }
+  }
+
+  // Growth can't reach cells outside the connected frontier on a fully
+  // connected grid, so this shouldn't fire — kept as a defensive fallback.
+  let unclaimed: Position[] = [];
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (regions[r][c] === -1) unclaimed.push({ row: r, col: c });
+    }
+  }
+  let guard = 0;
+  while (unclaimed.length > 0 && guard < 1000) {
+    guard++;
+    const next: Position[] = [];
+    for (const { row, col } of unclaimed) {
+      let assigned = false;
+      for (const [dr, dc] of ORTHOGONAL_NEIGHBORS) {
+        const r = row + dr;
+        const c = col + dc;
+        if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE && regions[r][c] !== -1) {
+          regions[row][col] = regions[r][c];
+          assigned = true;
+          break;
+        }
+      }
+      if (!assigned) next.push({ row, col });
+    }
+    unclaimed = next;
   }
 
   return regions;
 }
 
+const MAX_GENERATION_ATTEMPTS = 100;
+
 export function generatePuzzle(): Puzzle {
-  const dogCols = generateDogPositions();
-  const dogs: boolean[][] = Array.from({ length: GRID_SIZE }, () =>
-    new Array(GRID_SIZE).fill(false)
-  );
-  dogCols.forEach((col, row) => {
-    dogs[row][col] = true;
-  });
+  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
+    const dogCols = generateDogPositions();
+    const dogs: boolean[][] = Array.from({ length: GRID_SIZE }, () =>
+      new Array(GRID_SIZE).fill(false)
+    );
+    dogCols.forEach((col, row) => {
+      dogs[row][col] = true;
+    });
 
-  const regions = generateRegions(dogCols);
+    const regions = buildGreedyRegions(dogCols);
+    const puzzle: Puzzle = { size: GRID_SIZE, dogs, regions };
 
-  return { size: GRID_SIZE, dogs, regions };
+    if (solveLogically(puzzle).solved) return puzzle;
+  }
+
+  throw new Error('Failed to generate a logically solvable Sydoku puzzle after many attempts');
 }
