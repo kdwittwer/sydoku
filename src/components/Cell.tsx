@@ -4,6 +4,7 @@ interface CellProps {
   row: number;
   col: number;
   mark: CellMark;
+  dogImage: string | null;
   regionColor: string;
   conflict: boolean;
   borderStyle: React.CSSProperties;
@@ -17,6 +18,7 @@ export default function Cell({
   row,
   col,
   mark,
+  dogImage,
   regionColor,
   conflict,
   borderStyle,
@@ -40,7 +42,8 @@ export default function Cell({
       disabled={disabled}
       aria-label={mark === 'dog' ? 'Marked as dog' : mark === 'safe' ? 'Marked as safe' : 'Unmarked'}
     >
-      {mark === 'dog' && <span className="cell__icon">🐶</span>}
+      {mark === 'dog' && dogImage && <img className="cell__dog-image" src={dogImage} alt="" />}
+      {mark === 'dog' && !dogImage && <span className="cell__icon">🐶</span>}
       {mark === 'safe' && <span className="cell__safe">✕</span>}
     </button>
   );

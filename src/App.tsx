@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import Grid from './components/Grid';
+import { pickRandomDogImage } from './game/dogImages';
 import { generatePuzzle } from './game/generator';
-import { createEmptyMarks, findConflicts, isWon } from './game/logic';
+import { createEmptyDogImages, createEmptyMarks, findConflicts, isWon } from './game/logic';
 import type { CellMark, Puzzle } from './game/types';
 
 const NEW_PUZZLE_DELAY_MS = 1800;
@@ -10,6 +11,7 @@ const NEW_PUZZLE_DELAY_MS = 1800;
 export default function App() {
   const [puzzle, setPuzzle] = useState<Puzzle>(() => generatePuzzle());
   const [marks, setMarks] = useState<CellMark[][]>(() => createEmptyMarks());
+  const [dogImages, setDogImages] = useState<(string | null)[][]>(() => createEmptyDogImages());
 
   const conflicts = useMemo(() => findConflicts(puzzle, marks), [puzzle, marks]);
   const won = useMemo(() => isWon(puzzle, marks), [puzzle, marks]);
@@ -19,6 +21,7 @@ export default function App() {
     const timer = window.setTimeout(() => {
       setPuzzle(generatePuzzle());
       setMarks(createEmptyMarks());
+      setDogImages(createEmptyDogImages());
     }, NEW_PUZZLE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [won]);
@@ -31,13 +34,22 @@ export default function App() {
     });
   }, []);
 
-  const toggleDog = useCallback((row: number, col: number) => {
-    setMarks((prev) => {
-      const next = prev.map((r) => [...r]);
-      next[row][col] = prev[row][col] === 'dog' ? 'empty' : 'dog';
-      return next;
-    });
-  }, []);
+  const toggleDog = useCallback(
+    (row: number, col: number) => {
+      const willBeDog = marks[row][col] !== 'dog';
+      setMarks((prev) => {
+        const next = prev.map((r) => [...r]);
+        next[row][col] = willBeDog ? 'dog' : 'empty';
+        return next;
+      });
+      setDogImages((prev) => {
+        const next = prev.map((r) => [...r]);
+        next[row][col] = willBeDog ? pickRandomDogImage() : null;
+        return next;
+      });
+    },
+    [marks]
+  );
 
   const setMark = useCallback((row: number, col: number, mark: CellMark) => {
     setMarks((prev) => {
@@ -51,6 +63,7 @@ export default function App() {
   const handleNewPuzzle = useCallback(() => {
     setPuzzle(generatePuzzle());
     setMarks(createEmptyMarks());
+    setDogImages(createEmptyDogImages());
   }, []);
 
   return (
@@ -67,6 +80,7 @@ export default function App() {
       <Grid
         puzzle={puzzle}
         marks={marks}
+        dogImages={dogImages}
         conflicts={conflicts}
         disabled={won}
         onToggleSafe={toggleSafe}

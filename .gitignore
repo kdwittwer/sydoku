@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Python tooling for scripts/generate_dog_cutouts.py
+.venv
+__pycache__
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

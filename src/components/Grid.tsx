@@ -22,6 +22,7 @@ const CLICK_DELAY_MS = 220;
 interface GridProps {
   puzzle: Puzzle;
   marks: CellMark[][];
+  dogImages: (string | null)[][];
   conflicts: boolean[][];
   disabled: boolean;
   onToggleSafe: (row: number, col: number) => void;
@@ -67,6 +68,7 @@ interface DragState {
 export default function Grid({
   puzzle,
   marks,
+  dogImages,
   conflicts,
   disabled,
   onToggleSafe,
@@ -219,6 +221,7 @@ export default function Grid({
             row={row}
             col={col}
             mark={mark}
+            dogImage={dogImages[row][col]}
             regionColor={REGION_COLORS[puzzle.regions[row][col]]}
             conflict={conflicts[row][col]}
             borderStyle={borderStyleFor(puzzle, row, col)}

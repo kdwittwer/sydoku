@@ -4,6 +4,10 @@ export function createEmptyMarks(): CellMark[][] {
   return Array.from({ length: GRID_SIZE }, () => new Array(GRID_SIZE).fill('empty'));
 }
 
+export function createEmptyDogImages(): (string | null)[][] {
+  return Array.from({ length: GRID_SIZE }, () => new Array(GRID_SIZE).fill(null));
+}
+
 /** Returns a grid of booleans flagging every marked-dog cell that violates a placement rule. */
 export function findConflicts(puzzle: Puzzle, marks: CellMark[][]): boolean[][] {
   const conflicts: boolean[][] = Array.from({ length: GRID_SIZE }, () =>
