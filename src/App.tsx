@@ -39,6 +39,15 @@ export default function App() {
     });
   }, []);
 
+  const setMark = useCallback((row: number, col: number, mark: CellMark) => {
+    setMarks((prev) => {
+      if (prev[row][col] === mark) return prev;
+      const next = prev.map((r) => [...r]);
+      next[row][col] = mark;
+      return next;
+    });
+  }, []);
+
   const handleNewPuzzle = useCallback(() => {
     setPuzzle(generatePuzzle());
     setMarks(createEmptyMarks());
@@ -50,7 +59,8 @@ export default function App() {
         <h1>Sydoku</h1>
         <p>
           Find all 10 dogs. One per row, one per column, none touching &mdash; and exactly one
-          per colored section. Click a cell to mark it safe, double-click to flag a dog.
+          per colored section. Click a cell to mark it safe, double-click to flag a dog. Click and
+          drag to mark a whole swath at once.
         </p>
       </header>
 
@@ -61,6 +71,7 @@ export default function App() {
         disabled={won}
         onToggleSafe={toggleSafe}
         onToggleDog={toggleDog}
+        onSetMark={setMark}
       />
 
       <div className="app__footer">

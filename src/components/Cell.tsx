@@ -1,59 +1,42 @@
-import { useEffect, useRef } from 'react';
 import type { CellMark } from '../game/types';
 
-const CLICK_DELAY_MS = 220;
-
 interface CellProps {
+  row: number;
+  col: number;
   mark: CellMark;
   regionColor: string;
   conflict: boolean;
   borderStyle: React.CSSProperties;
   disabled: boolean;
-  onToggleSafe: () => void;
-  onToggleDog: () => void;
+  onPointerDownCell: (row: number, col: number) => void;
+  onClickCell: (row: number, col: number) => void;
+  onDoubleClickCell: (row: number, col: number) => void;
 }
 
 export default function Cell({
+  row,
+  col,
   mark,
   regionColor,
   conflict,
   borderStyle,
   disabled,
-  onToggleSafe,
-  onToggleDog,
+  onPointerDownCell,
+  onClickCell,
+  onDoubleClickCell,
 }: CellProps) {
-  const timerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const handleClick = () => {
-    if (disabled || timerRef.current !== null) return;
-    timerRef.current = window.setTimeout(() => {
-      onToggleSafe();
-      timerRef.current = null;
-    }, CLICK_DELAY_MS);
-  };
-
-  const handleDoubleClick = () => {
-    if (disabled) return;
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    onToggleDog();
-  };
-
   return (
     <button
       type="button"
+      data-row={row}
+      data-col={col}
       className={`cell${conflict ? ' cell--conflict' : ''}`}
       style={{ backgroundColor: regionColor, ...borderStyle }}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
+      onPointerDown={(e) => {
+        if (e.button === 0) onPointerDownCell(row, col);
+      }}
+      onClick={() => onClickCell(row, col)}
+      onDoubleClick={() => onDoubleClickCell(row, col)}
       disabled={disabled}
       aria-label={mark === 'dog' ? 'Marked as dog' : mark === 'safe' ? 'Marked as safe' : 'Unmarked'}
     >
