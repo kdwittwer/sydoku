@@ -55,7 +55,7 @@ export default function Cell({
     >
       {mark === 'dog' && dogImage && <img className="cell__dog-image" src={dogImage} alt="" />}
       {mark === 'dog' && !dogImage && <span className="cell__icon">🐶</span>}
-      {mark === 'safe' && <span className="cell__safe">✕</span>}
+      {mark === 'safe' && <span className="cell__safe" aria-hidden="true" />}
       {incorrect && <span className="cell__incorrect-badge">✕</span>}
     </button>
   );

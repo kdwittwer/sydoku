@@ -90,7 +90,6 @@
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  container-type: inline-size;
   font-size: clamp(14px, 3vw, 24px);
   line-height: 1;
   transition: filter 0.15s ease;
@@ -144,11 +143,35 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
+/* Drawn with two crossed bars instead of a text glyph — the "✕" character
+   renders with a lot of empty padding inside its own font box (and that
+   padding varies by device/font), so bumping font-size alone couldn't make
+   the actual visible mark much bigger. This gives exact control over how
+   much of the cell the ink fills, consistently everywhere. */
 .cell__safe {
-  font-size: 58cqw;
-  color: rgba(0, 0, 0, 0.72);
-  font-weight: 800;
-  line-height: 1;
+  position: relative;
+  width: 64%;
+  height: 64%;
+}
+
+.cell__safe::before,
+.cell__safe::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 20%;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 3px;
+}
+
+.cell__safe::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.cell__safe::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .app__footer {
