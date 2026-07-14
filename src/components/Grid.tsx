@@ -24,6 +24,7 @@ interface GridProps {
   marks: CellMark[][];
   dogImages: (string | null)[][];
   conflicts: boolean[][];
+  incorrect: boolean[][];
   disabled: boolean;
   onToggleSafe: (row: number, col: number) => void;
   onToggleDog: (row: number, col: number) => void;
@@ -70,6 +71,7 @@ export default function Grid({
   marks,
   dogImages,
   conflicts,
+  incorrect,
   disabled,
   onToggleSafe,
   onToggleDog,
@@ -224,6 +226,7 @@ export default function Grid({
             dogImage={dogImages[row][col]}
             regionColor={REGION_COLORS[puzzle.regions[row][col]]}
             conflict={conflicts[row][col]}
+            incorrect={incorrect[row][col]}
             borderStyle={borderStyleFor(puzzle, row, col)}
             disabled={disabled}
             onPointerDownCell={handlePointerDownCell}
