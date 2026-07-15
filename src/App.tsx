@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import Grid from './components/Grid';
+import WinCelebration from './components/WinCelebration';
 import { pickRandomDogImage } from './game/dogImages';
 import { requestPuzzle } from './game/generatorClient';
 import { createEmptyDogImages, createEmptyMarks, isWon } from './game/logic';
 import type { CellMark, Puzzle } from './game/types';
 
-const NEW_PUZZLE_DELAY_MS = 1800;
 const MAX_MISTAKES = 3;
 const WRONG_FLASH_MS = 500;
 
@@ -39,12 +39,6 @@ export default function App() {
   useEffect(() => {
     loadPuzzle();
   }, [loadPuzzle]);
-
-  useEffect(() => {
-    if (!won) return;
-    const timer = window.setTimeout(loadPuzzle, NEW_PUZZLE_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [won, loadPuzzle]);
 
   const toggleSafe = useCallback((row: number, col: number) => {
     setMarks((prev) => {
@@ -125,28 +119,19 @@ export default function App() {
       </div>
 
       <div className="app__footer">
-        {won ? (
-          <p className="app__won">🐾 You found every dog! New puzzle incoming&hellip;</p>
-        ) : (
-          <>
-            {lost ? (
-              <p className="app__lost">❌ Out of guesses! Start a new puzzle to try again.</p>
-            ) : (
-              <p className="app__mistakes" aria-live="polite">
-                Mistakes: {mistakes} / {MAX_MISTAKES}
-              </p>
-            )}
-            <button
-              type="button"
-              className="app__button"
-              onClick={loadPuzzle}
-              disabled={isGenerating}
-            >
-              New puzzle
-            </button>
-          </>
+        {won && <p className="app__won">🐾 You found every dog!</p>}
+        {lost && <p className="app__lost">❌ Out of guesses! Start a new puzzle to try again.</p>}
+        {!won && !lost && (
+          <p className="app__mistakes" aria-live="polite">
+            Mistakes: {mistakes} / {MAX_MISTAKES}
+          </p>
         )}
+        <button type="button" className="app__button" onClick={loadPuzzle} disabled={isGenerating}>
+          New puzzle
+        </button>
       </div>
+
+      <WinCelebration active={won && !isGenerating} />
     </div>
   );
 }

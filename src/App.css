@@ -18,6 +18,24 @@
   overflow: hidden;
 }
 
+.win-celebration {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.win-celebration__sprite {
+  position: absolute;
+  top: 0;
+  left: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+  transition: opacity 0.25s ease;
+  will-change: transform;
+}
+
 .app__header {
   flex: 0 0 auto;
   text-align: center;
