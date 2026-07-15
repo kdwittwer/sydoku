@@ -4,7 +4,16 @@
   flex-direction: column;
   align-items: center;
   gap: clamp(6px, 2dvh, 16px);
-  padding: clamp(8px, 2dvh, 20px) 16px;
+  /* apple-mobile-web-app-status-bar-style is black-translucent (see
+     index.html) so the status bar / notch / dynamic island overlays the
+     page instead of pushing it down — without env(safe-area-inset-*) here,
+     the header renders partly underneath it, especially as an installed
+     PWA in standalone mode. viewport-fit=cover (also in index.html) is
+     required for these to report real values instead of always 0. */
+  padding: calc(clamp(8px, 2dvh, 20px) + env(safe-area-inset-top, 0px))
+    calc(16px + env(safe-area-inset-right, 0px))
+    calc(clamp(8px, 2dvh, 20px) + env(safe-area-inset-bottom, 0px))
+    calc(16px + env(safe-area-inset-left, 0px));
   box-sizing: border-box;
   overflow: hidden;
 }
