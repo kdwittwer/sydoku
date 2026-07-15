@@ -198,7 +198,11 @@ export default function App() {
           </p>
         )}
         <p className="app__stats">
-          Wins: {stats.wins} &middot; Losses: {stats.losses} &middot; Streak: {stats.currentStreak}
+          <span className="app__stat app__stat--wins">Wins: {stats.wins}</span>
+          <span className="app__stat-sep">&middot;</span>
+          <span className="app__stat app__stat--losses">Losses: {stats.losses}</span>
+          <span className="app__stat-sep">&middot;</span>
+          <span className="app__stat app__stat--streak">Streak: {stats.currentStreak}</span>
         </p>
         <div className="app__actions">
           <button

@@ -276,8 +276,38 @@
 .app__stats {
   margin: 0;
   font-size: 12px;
+}
+
+.app__stat-sep {
   color: var(--text, #555);
   opacity: 0.75;
+  margin: 0 4px;
+}
+
+.app__stat--wins {
+  color: #2e7d32;
+}
+
+.app__stat--losses {
+  color: #d21f1f;
+}
+
+.app__stat--streak {
+  color: #b58900;
+}
+
+@media (prefers-color-scheme: dark) {
+  .app__stat--wins {
+    color: #4ade80;
+  }
+
+  .app__stat--losses {
+    color: #f87171;
+  }
+
+  .app__stat--streak {
+    color: #facc15;
+  }
 }
 
 .app__actions {
