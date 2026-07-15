@@ -5,6 +5,7 @@ import WinCelebration from './components/WinCelebration';
 import { pickRandomDogImage } from './game/dogImages';
 import { requestPuzzle } from './game/generatorClient';
 import { createEmptyDogImages, createEmptyMarks, isWon } from './game/logic';
+import { applyLoss, applyWin, loadStats, saveStats, type Stats } from './game/stats';
 import type { CellMark, Puzzle } from './game/types';
 
 const MAX_MISTAKES = 3;
@@ -21,9 +22,27 @@ export default function App() {
   // `marks`, so every 'dog' mark in `marks` is always correct by
   // construction; this is purely a transient visual, not game state.
   const [wrongCell, setWrongCell] = useState<{ row: number; col: number } | null>(null);
+  const [stats, setStats] = useState<Stats>(() => loadStats());
 
   const won = useMemo(() => (puzzle ? isWon(puzzle, marks) : false), [puzzle, marks]);
   const lost = mistakes >= MAX_MISTAKES;
+
+  // Fires exactly once per game: `won`/`lost` only flip true -> false again
+  // when loadPuzzle() resets marks/mistakes for the next puzzle, so this
+  // never double-counts a single completion. Persisting is a separate
+  // effect keyed on `stats` itself, so the win/loss transforms above stay
+  // pure state updaters with no side effect buried inside them.
+  useEffect(() => {
+    if (won) setStats(applyWin);
+  }, [won]);
+
+  useEffect(() => {
+    if (lost) setStats(applyLoss);
+  }, [lost]);
+
+  useEffect(() => {
+    saveStats(stats);
+  }, [stats]);
 
   const loadPuzzle = useCallback(async () => {
     setIsGenerating(true);
@@ -126,6 +145,9 @@ export default function App() {
             Mistakes: {mistakes} / {MAX_MISTAKES}
           </p>
         )}
+        <p className="app__stats">
+          Wins: {stats.wins} &middot; Losses: {stats.losses} &middot; Streak: {stats.currentStreak}
+        </p>
         <button type="button" className="app__button" onClick={loadPuzzle} disabled={isGenerating}>
           New puzzle
         </button>
