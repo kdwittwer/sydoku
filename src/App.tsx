@@ -20,6 +20,8 @@ export default function App() {
   );
   const [isGenerating, setIsGenerating] = useState(true);
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [lastRequestedSize, setLastRequestedSize] = useState(STANDARD_SIZE);
   const [mistakes, setMistakes] = useState(0);
   // The one cell currently showing the brief "wrong" shake/flash — cleared
   // automatically a moment later. Wrong guesses are never written into
@@ -55,16 +57,32 @@ export default function App() {
   }, [stats]);
 
   const loadPuzzle = useCallback(async (size: number) => {
+    setLastRequestedSize(size);
     setIsGenerating(true);
     setGenerationProgress(null);
-    const next = await requestPuzzle(size, setGenerationProgress);
-    setPuzzle(next);
-    setMarks(createEmptyMarks(next.size));
-    setDogImages(createEmptyDogImages(next.size));
-    setMistakes(0);
-    setWrongCell(null);
-    setIsGenerating(false);
-    setGenerationProgress(null);
+    setGenerationError(null);
+    try {
+      const next = await requestPuzzle(size, setGenerationProgress);
+      setPuzzle(next);
+      setMarks(createEmptyMarks(next.size));
+      setDogImages(createEmptyDogImages(next.size));
+      setMistakes(0);
+      setWrongCell(null);
+    } catch (err) {
+      // Without this, a worker that fails to load or never responds (seen
+      // on some Android browsers/WebViews) left the UI stuck showing
+      // "Generating puzzle..." forever — the promise rejected, but nothing
+      // ever caught it. The fallback message must never be an empty string:
+      // browsers often withhold detail on a worker load failure (err.message
+      // === ''), which is falsy and would be indistinguishable from "no
+      // error" wherever this state is checked.
+      setGenerationError(
+        err instanceof Error && err.message ? err.message : 'Something went wrong generating the puzzle.'
+      );
+    } finally {
+      setIsGenerating(false);
+      setGenerationProgress(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -158,18 +176,7 @@ export default function App() {
       </header>
 
       <div className="app__board">
-        {puzzle && !isGenerating ? (
-          <Grid
-            puzzle={puzzle}
-            marks={marks}
-            dogImages={dogImages}
-            wrongCell={wrongCell}
-            disabled={won || lost}
-            onToggleSafe={toggleSafe}
-            onAttemptDog={attemptDog}
-            onSetMark={setMark}
-          />
-        ) : (
+        {isGenerating ? (
           <div className="app__loading" role="status" aria-live="polite">
             <div className="app__spinner" />
             {generationProgress ? (
@@ -186,7 +193,29 @@ export default function App() {
               <p>Generating puzzle&hellip;</p>
             )}
           </div>
-        )}
+        ) : generationError !== null ? (
+          <div className="app__loading" role="alert">
+            <p>😕 Couldn't generate a puzzle: {generationError}</p>
+            <button
+              type="button"
+              className="app__button"
+              onClick={() => loadPuzzle(lastRequestedSize)}
+            >
+              Retry
+            </button>
+          </div>
+        ) : puzzle ? (
+          <Grid
+            puzzle={puzzle}
+            marks={marks}
+            dogImages={dogImages}
+            wrongCell={wrongCell}
+            disabled={won || lost}
+            onToggleSafe={toggleSafe}
+            onAttemptDog={attemptDog}
+            onSetMark={setMark}
+          />
+        ) : null}
       </div>
 
       <div className="app__footer">
