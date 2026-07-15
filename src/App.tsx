@@ -48,6 +48,7 @@ export default function App() {
 
   const toggleSafe = useCallback((row: number, col: number) => {
     setMarks((prev) => {
+      if (prev[row][col] === 'dog') return prev; // a correctly-placed dog is locked in
       const next = prev.map((r) => [...r]);
       next[row][col] = prev[row][col] === 'empty' ? 'safe' : 'empty';
       return next;
@@ -57,21 +58,7 @@ export default function App() {
   const attemptDog = useCallback(
     (row: number, col: number) => {
       if (!puzzle) return;
-
-      if (marks[row][col] === 'dog') {
-        // Unmarking your own placement is always free — no check needed.
-        setMarks((prev) => {
-          const next = prev.map((r) => [...r]);
-          next[row][col] = 'empty';
-          return next;
-        });
-        setDogImages((prev) => {
-          const next = prev.map((r) => [...r]);
-          next[row][col] = null;
-          return next;
-        });
-        return;
-      }
+      if (marks[row][col] === 'dog') return; // already correct — can't be undone
 
       if (puzzle.dogs[row][col]) {
         setMarks((prev) => {
@@ -111,8 +98,9 @@ export default function App() {
       <header className="app__header">
         <h1>Sydoku</h1>
         <p>
-          Find all 10 dogs — one per row, column, and section. Click for safe, double-click for
-          dog, drag to mark many at once. 3 wrong guesses and the puzzle's lost.
+          Find all 10 dogs — one per row, column, and section, none touching (even diagonally).
+          Click for safe, double-click for dog, drag to mark many at once. 3 wrong guesses and the
+          puzzle's lost.
         </p>
       </header>
 
