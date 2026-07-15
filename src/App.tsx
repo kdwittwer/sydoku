@@ -30,6 +30,12 @@ export default function App() {
 
   const won = useMemo(() => (puzzle ? isWon(puzzle, marks) : false), [puzzle, marks]);
   const lost = mistakes >= MAX_MISTAKES;
+  // Large puzzles are generated best-effort (see generator.ts) and aren't
+  // verified solvable by pure deduction the way standard puzzles are — a
+  // player can get stuck with no logical next move. "Reveal a dog" below is
+  // the honest fallback for that, rather than pretending every large puzzle
+  // is crackable by logic alone.
+  const isLarge = puzzle ? puzzle.size > STANDARD_SIZE : false;
 
   // Fires exactly once per game: `won`/`lost` only flip true -> false again
   // when loadPuzzle() resets marks/mistakes for the next puzzle, so this
@@ -103,6 +109,30 @@ export default function App() {
     [marks, puzzle]
   );
 
+  const revealDog = useCallback(() => {
+    if (!puzzle) return;
+    const candidates: { row: number; col: number }[] = [];
+    for (let row = 0; row < puzzle.size; row++) {
+      for (let col = 0; col < puzzle.size; col++) {
+        if (puzzle.dogs[row][col] && marks[row][col] !== 'dog') {
+          candidates.push({ row, col });
+        }
+      }
+    }
+    if (candidates.length === 0) return;
+    const { row, col } = candidates[Math.floor(Math.random() * candidates.length)];
+    setMarks((prev) => {
+      const next = prev.map((r) => [...r]);
+      next[row][col] = 'dog';
+      return next;
+    });
+    setDogImages((prev) => {
+      const next = prev.map((r) => [...r]);
+      next[row][col] = pickRandomDogImage();
+      return next;
+    });
+  }, [puzzle, marks]);
+
   const setMark = useCallback((row: number, col: number, mark: CellMark) => {
     setMarks((prev) => {
       if (prev[row][col] === mark) return prev;
@@ -121,9 +151,9 @@ export default function App() {
       <header className="app__header">
         <h1>Sydoku</h1>
         <p>
-          Find all 10 dogs — one per row, column, and section, none touching (even diagonally).
-          Click for safe, double-click for dog, drag to mark many at once. 3 wrong guesses and the
-          puzzle's lost.
+          Find all {puzzle?.size ?? STANDARD_SIZE} dogs — one per row, column, and section, none
+          touching (even diagonally). Click for safe, double-click for dog, drag to mark many at
+          once. 3 wrong guesses and the puzzle's lost.
         </p>
       </header>
 
@@ -184,11 +214,26 @@ export default function App() {
             className="app__button"
             onClick={() => loadPuzzle(LARGE_SIZE)}
             disabled={isGenerating}
-            title="20x20, 20 dogs, 20 sections — best-effort generation, may occasionally admit more than one valid solution"
+            title="20x20, 20 dogs, 20 sections — best-effort generation. Not verified solvable by logic alone; use Reveal a dog if you get stuck."
           >
             New large puzzle (beta)
           </button>
         </div>
+        {isLarge && !won && !lost && (
+          <div className="app__hint">
+            <p className="app__hint-text">
+              Large puzzles aren't guaranteed solvable by logic alone.
+            </p>
+            <button
+              type="button"
+              className="app__button app__button--hint"
+              onClick={revealDog}
+              disabled={isGenerating}
+            >
+              Reveal a dog
+            </button>
+          </div>
+        )}
       </div>
 
       <WinCelebration active={won && !isGenerating} />
