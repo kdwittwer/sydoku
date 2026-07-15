@@ -2,7 +2,7 @@
 
 from PIL import Image
 
-ACCENT_PURPLE = (170, 59, 255, 255)  # #aa3bff
+TRANSPARENT = (0, 0, 0, 0)
 SRC = "src/assets/dogs/cutouts/dog7.png"
 OUT_DIR = "public/icons"
 
@@ -18,7 +18,7 @@ def build_square(src: Image.Image, canvas_size: int, content_fraction: float) ->
     scale = content_size / max(w, h)
     resized = trimmed.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
 
-    canvas = Image.new("RGBA", (canvas_size, canvas_size), ACCENT_PURPLE)
+    canvas = Image.new("RGBA", (canvas_size, canvas_size), TRANSPARENT)
     rw, rh = resized.size
     offset = ((canvas_size - rw) // 2, (canvas_size - rh) // 2)
     canvas.paste(resized, offset, resized)
@@ -34,9 +34,7 @@ def main():
         resized = base.resize((size, size), Image.LANCZOS)
         resized.save(f"{OUT_DIR}/icon-{size}.png")
 
-    # apple-touch-icon.png mirrors icon-180 but flattened to RGB (no alpha),
-    # matching the existing convention in this file.
-    apple = base.resize((180, 180), Image.LANCZOS).convert("RGB")
+    apple = base.resize((180, 180), Image.LANCZOS)
     apple.save(f"{OUT_DIR}/apple-touch-icon.png")
 
     # Maskable: extra margin so the OS's circular/rounded crop doesn't clip the dog.
