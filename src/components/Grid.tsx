@@ -23,11 +23,10 @@ interface GridProps {
   puzzle: Puzzle;
   marks: CellMark[][];
   dogImages: (string | null)[][];
-  conflicts: boolean[][];
-  incorrect: boolean[][];
+  wrongCell: { row: number; col: number } | null;
   disabled: boolean;
   onToggleSafe: (row: number, col: number) => void;
-  onToggleDog: (row: number, col: number) => void;
+  onAttemptDog: (row: number, col: number) => void;
   onSetMark: (row: number, col: number, mark: CellMark) => void;
 }
 
@@ -70,11 +69,10 @@ export default function Grid({
   puzzle,
   marks,
   dogImages,
-  conflicts,
-  incorrect,
+  wrongCell,
   disabled,
   onToggleSafe,
-  onToggleDog,
+  onAttemptDog,
   onSetMark,
 }: GridProps) {
   const dragStateRef = useRef<DragState | null>(null);
@@ -141,9 +139,9 @@ export default function Grid({
         window.clearTimeout(clickTimerRef.current);
         clickTimerRef.current = null;
       }
-      onToggleDog(row, col);
+      onAttemptDog(row, col);
     },
-    [onToggleDog]
+    [onAttemptDog]
   );
 
   useEffect(() => {
@@ -225,8 +223,7 @@ export default function Grid({
             mark={mark}
             dogImage={dogImages[row][col]}
             regionColor={REGION_COLORS[puzzle.regions[row][col]]}
-            conflict={conflicts[row][col]}
-            incorrect={incorrect[row][col]}
+            wrong={wrongCell !== null && wrongCell.row === row && wrongCell.col === col}
             borderStyle={borderStyleFor(puzzle, row, col)}
             disabled={disabled}
             onPointerDownCell={handlePointerDownCell}

@@ -6,8 +6,7 @@ interface CellProps {
   mark: CellMark;
   dogImage: string | null;
   regionColor: string;
-  conflict: boolean;
-  incorrect: boolean;
+  wrong: boolean;
   borderStyle: React.CSSProperties;
   disabled: boolean;
   onPointerDownCell: (row: number, col: number) => void;
@@ -21,19 +20,17 @@ export default function Cell({
   mark,
   dogImage,
   regionColor,
-  conflict,
-  incorrect,
+  wrong,
   borderStyle,
   disabled,
   onPointerDownCell,
   onClickCell,
   onDoubleClickCell,
 }: CellProps) {
-  const label =
-    mark === 'dog'
-      ? incorrect
-        ? 'Marked as dog (incorrect)'
-        : 'Marked as dog'
+  const label = wrong
+    ? 'Wrong — no dog here'
+    : mark === 'dog'
+      ? 'Marked as dog'
       : mark === 'safe'
         ? 'Marked as safe'
         : 'Unmarked';
@@ -43,7 +40,7 @@ export default function Cell({
       type="button"
       data-row={row}
       data-col={col}
-      className={`cell${conflict ? ' cell--conflict' : ''}${incorrect ? ' cell--incorrect' : ''}`}
+      className={`cell${wrong ? ' cell--wrong' : ''}`}
       style={{ backgroundColor: regionColor, ...borderStyle }}
       onPointerDown={(e) => {
         if (e.button === 0) onPointerDownCell(row, col);
@@ -56,7 +53,6 @@ export default function Cell({
       {mark === 'dog' && dogImage && <img className="cell__dog-image" src={dogImage} alt="" />}
       {mark === 'dog' && !dogImage && <span className="cell__icon">🐶</span>}
       {mark === 'safe' && <span className="cell__safe" aria-hidden="true" />}
-      {incorrect && <span className="cell__incorrect-badge">✕</span>}
     </button>
   );
 }

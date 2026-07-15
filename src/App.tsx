@@ -3,52 +3,27 @@ import './App.css';
 import Grid from './components/Grid';
 import { pickRandomDogImage } from './game/dogImages';
 import { requestPuzzle } from './game/generatorClient';
-import { createEmptyDogImages, createEmptyMarks, findConflicts, isWon } from './game/logic';
-import { GRID_SIZE } from './game/types';
+import { createEmptyDogImages, createEmptyMarks, isWon } from './game/logic';
 import type { CellMark, Puzzle } from './game/types';
 
 const NEW_PUZZLE_DELAY_MS = 1800;
+const MAX_MISTAKES = 3;
+const WRONG_FLASH_MS = 500;
 
 export default function App() {
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [marks, setMarks] = useState<CellMark[][]>(() => createEmptyMarks());
   const [dogImages, setDogImages] = useState<(string | null)[][]>(() => createEmptyDogImages());
   const [isGenerating, setIsGenerating] = useState(true);
-  // Snapshot of marks taken the moment "Check Dogs" was last pressed. Kept
-  // separate from `marks` so a wrong-dog flag can disappear the instant the
-  // user edits that specific cell (see `incorrect` below), without turning
-  // this into live validation of every dog the moment it's placed.
-  const [checkedSnapshot, setCheckedSnapshot] = useState<CellMark[][] | null>(null);
+  const [mistakes, setMistakes] = useState(0);
+  // The one cell currently showing the brief "wrong" shake/flash — cleared
+  // automatically a moment later. Wrong guesses are never written into
+  // `marks`, so every 'dog' mark in `marks` is always correct by
+  // construction; this is purely a transient visual, not game state.
+  const [wrongCell, setWrongCell] = useState<{ row: number; col: number } | null>(null);
 
-  const conflicts = useMemo(() => {
-    if (puzzle) return findConflicts(puzzle, marks);
-    return Array.from({ length: GRID_SIZE }, () => new Array(GRID_SIZE).fill(false));
-  }, [puzzle, marks]);
   const won = useMemo(() => (puzzle ? isWon(puzzle, marks) : false), [puzzle, marks]);
-
-  const incorrect = useMemo(() => {
-    const grid = Array.from({ length: GRID_SIZE }, () => new Array(GRID_SIZE).fill(false));
-    if (!checkedSnapshot || !puzzle) return grid;
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        // Only still-flagged if the cell was dog-marked at check time AND
-        // remains dog-marked now — editing it clears the flag immediately.
-        if (checkedSnapshot[r][c] === 'dog' && marks[r][c] === 'dog' && !puzzle.dogs[r][c]) {
-          grid[r][c] = true;
-        }
-      }
-    }
-    return grid;
-  }, [checkedSnapshot, marks, puzzle]);
-
-  const incorrectCount = useMemo(
-    () => incorrect.reduce((sum, row) => sum + row.filter(Boolean).length, 0),
-    [incorrect]
-  );
-  const markedDogCount = useMemo(
-    () => marks.reduce((sum, row) => sum + row.filter((m) => m === 'dog').length, 0),
-    [marks]
-  );
+  const lost = mistakes >= MAX_MISTAKES;
 
   const loadPuzzle = useCallback(async () => {
     setIsGenerating(true);
@@ -56,7 +31,8 @@ export default function App() {
     setPuzzle(next);
     setMarks(createEmptyMarks());
     setDogImages(createEmptyDogImages());
-    setCheckedSnapshot(null);
+    setMistakes(0);
+    setWrongCell(null);
     setIsGenerating(false);
   }, []);
 
@@ -78,21 +54,47 @@ export default function App() {
     });
   }, []);
 
-  const toggleDog = useCallback(
+  const attemptDog = useCallback(
     (row: number, col: number) => {
-      const willBeDog = marks[row][col] !== 'dog';
-      setMarks((prev) => {
-        const next = prev.map((r) => [...r]);
-        next[row][col] = willBeDog ? 'dog' : 'empty';
-        return next;
-      });
-      setDogImages((prev) => {
-        const next = prev.map((r) => [...r]);
-        next[row][col] = willBeDog ? pickRandomDogImage() : null;
-        return next;
-      });
+      if (!puzzle) return;
+
+      if (marks[row][col] === 'dog') {
+        // Unmarking your own placement is always free — no check needed.
+        setMarks((prev) => {
+          const next = prev.map((r) => [...r]);
+          next[row][col] = 'empty';
+          return next;
+        });
+        setDogImages((prev) => {
+          const next = prev.map((r) => [...r]);
+          next[row][col] = null;
+          return next;
+        });
+        return;
+      }
+
+      if (puzzle.dogs[row][col]) {
+        setMarks((prev) => {
+          const next = prev.map((r) => [...r]);
+          next[row][col] = 'dog';
+          return next;
+        });
+        setDogImages((prev) => {
+          const next = prev.map((r) => [...r]);
+          next[row][col] = pickRandomDogImage();
+          return next;
+        });
+      } else {
+        setMistakes((m) => Math.min(m + 1, MAX_MISTAKES));
+        setWrongCell({ row, col });
+        window.setTimeout(() => {
+          setWrongCell((current) =>
+            current && current.row === row && current.col === col ? null : current
+          );
+        }, WRONG_FLASH_MS);
+      }
     },
-    [marks]
+    [marks, puzzle]
   );
 
   const setMark = useCallback((row: number, col: number, mark: CellMark) => {
@@ -104,17 +106,13 @@ export default function App() {
     });
   }, []);
 
-  const handleCheckDogs = useCallback(() => {
-    setCheckedSnapshot(marks.map((row) => [...row]));
-  }, [marks]);
-
   return (
     <div className="app">
       <header className="app__header">
         <h1>Sydoku</h1>
         <p>
           Find all 10 dogs — one per row, column, and section. Click for safe, double-click for
-          dog, drag to mark many at once.
+          dog, drag to mark many at once. 3 wrong guesses and the puzzle's lost.
         </p>
       </header>
 
@@ -124,11 +122,10 @@ export default function App() {
             puzzle={puzzle}
             marks={marks}
             dogImages={dogImages}
-            conflicts={conflicts}
-            incorrect={incorrect}
-            disabled={won}
+            wrongCell={wrongCell}
+            disabled={won || lost}
             onToggleSafe={toggleSafe}
-            onToggleDog={toggleDog}
+            onAttemptDog={attemptDog}
             onSetMark={setMark}
           />
         ) : (
@@ -144,37 +141,21 @@ export default function App() {
           <p className="app__won">🐾 You found every dog! New puzzle incoming&hellip;</p>
         ) : (
           <>
-            <div className="app__actions">
-              <button
-                type="button"
-                className="app__button"
-                onClick={handleCheckDogs}
-                disabled={isGenerating}
-              >
-                Check dogs
-              </button>
-              <button
-                type="button"
-                className="app__button"
-                onClick={loadPuzzle}
-                disabled={isGenerating}
-              >
-                New puzzle
-              </button>
-            </div>
-            {checkedSnapshot &&
-              (incorrectCount > 0 ? (
-                <p className="app__check-result app__check-result--bad">
-                  {incorrectCount} marked {incorrectCount === 1 ? 'dog is' : 'dogs are'} wrong
-                  &mdash; flagged in red.
-                </p>
-              ) : markedDogCount > 0 ? (
-                <p className="app__check-result app__check-result--good">
-                  Every marked dog is correct so far!
-                </p>
-              ) : (
-                <p className="app__check-result">No dogs marked yet.</p>
-              ))}
+            {lost ? (
+              <p className="app__lost">❌ Out of guesses! Start a new puzzle to try again.</p>
+            ) : (
+              <p className="app__mistakes" aria-live="polite">
+                Mistakes: {mistakes} / {MAX_MISTAKES}
+              </p>
+            )}
+            <button
+              type="button"
+              className="app__button"
+              onClick={loadPuzzle}
+              disabled={isGenerating}
+            >
+              New puzzle
+            </button>
           </>
         )}
       </div>
