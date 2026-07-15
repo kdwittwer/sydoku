@@ -1,4 +1,4 @@
-import { DOG_COUNT, GRID_SIZE, type Puzzle } from './types';
+import type { Puzzle } from './types';
 
 type CellState = 'unknown' | 'eliminated' | 'confirmed';
 type Coord = [number, number];
@@ -21,23 +21,22 @@ const NEIGHBOR_OFFSETS: Coord[] = [
  * information a player has; puzzle.dogs is never consulted.
  *
  * Every rule here only eliminates a cell when no valid solution could place
- * a dog there, so reaching a full solve (confirmedCount === DOG_COUNT) also
- * proves the solution is unique: genuine ambiguity would leave at least one
+ * a dog there, so reaching a full solve (confirmedCount === N) also proves
+ * the solution is unique: genuine ambiguity would leave at least one
  * row/column/region with more than one live candidate forever.
  */
 export function solveLogically(puzzle: Puzzle): SolveResult {
-  const state: CellState[][] = Array.from({ length: GRID_SIZE }, () =>
-    new Array(GRID_SIZE).fill('unknown')
-  );
-  const rowConfirmed = new Array(GRID_SIZE).fill(false);
-  const colConfirmed = new Array(GRID_SIZE).fill(false);
-  const regionConfirmed = new Array(DOG_COUNT).fill(false);
+  const N = puzzle.size;
+  const state: CellState[][] = Array.from({ length: N }, () => new Array(N).fill('unknown'));
+  const rowConfirmed = new Array(N).fill(false);
+  const colConfirmed = new Array(N).fill(false);
+  const regionConfirmed = new Array(N).fill(false);
 
-  const rowCells: Coord[][] = Array.from({ length: GRID_SIZE }, () => []);
-  const colCells: Coord[][] = Array.from({ length: GRID_SIZE }, () => []);
-  const regionCells: Coord[][] = Array.from({ length: DOG_COUNT }, () => []);
-  for (let r = 0; r < GRID_SIZE; r++) {
-    for (let c = 0; c < GRID_SIZE; c++) {
+  const rowCells: Coord[][] = Array.from({ length: N }, () => []);
+  const colCells: Coord[][] = Array.from({ length: N }, () => []);
+  const regionCells: Coord[][] = Array.from({ length: N }, () => []);
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
       rowCells[r].push([r, c]);
       colCells[c].push([r, c]);
       regionCells[puzzle.regions[r][c]].push([r, c]);
@@ -64,7 +63,7 @@ export function solveLogically(puzzle: Puzzle): SolveResult {
     for (const [dr, dc] of NEIGHBOR_OFFSETS) {
       const nr = r + dr;
       const nc = c + dc;
-      if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) eliminate(nr, nc);
+      if (nr >= 0 && nr < N && nc >= 0 && nc < N) eliminate(nr, nc);
     }
   };
 
@@ -75,7 +74,7 @@ export function solveLogically(puzzle: Puzzle): SolveResult {
     changed = false;
 
     // Naked singles: a row/column/region with exactly one live candidate must hold the dog.
-    for (let r = 0; r < GRID_SIZE; r++) {
+    for (let r = 0; r < N; r++) {
       if (rowConfirmed[r]) continue;
       const unknowns = unknownsOf(rowCells[r]);
       if (unknowns.length === 1) {
@@ -83,7 +82,7 @@ export function solveLogically(puzzle: Puzzle): SolveResult {
         changed = true;
       }
     }
-    for (let c = 0; c < GRID_SIZE; c++) {
+    for (let c = 0; c < N; c++) {
       if (colConfirmed[c]) continue;
       const unknowns = unknownsOf(colCells[c]);
       if (unknowns.length === 1) {
@@ -91,7 +90,7 @@ export function solveLogically(puzzle: Puzzle): SolveResult {
         changed = true;
       }
     }
-    for (let region = 0; region < DOG_COUNT; region++) {
+    for (let region = 0; region < N; region++) {
       if (regionConfirmed[region]) continue;
       const unknowns = unknownsOf(regionCells[region]);
       if (unknowns.length === 1) {
@@ -103,7 +102,7 @@ export function solveLogically(puzzle: Puzzle): SolveResult {
 
     // Region confined to a single row/column -> that row/column's dog is this
     // region's dog, so no other region may use it.
-    for (let region = 0; region < DOG_COUNT; region++) {
+    for (let region = 0; region < N; region++) {
       if (regionConfirmed[region]) continue;
       const unknowns = unknownsOf(regionCells[region]);
       if (unknowns.length === 0) continue;
@@ -131,7 +130,7 @@ export function solveLogically(puzzle: Puzzle): SolveResult {
     }
 
     // Row/column confined to a single region -> symmetric reduction the other way.
-    for (let r = 0; r < GRID_SIZE; r++) {
+    for (let r = 0; r < N; r++) {
       if (rowConfirmed[r]) continue;
       const unknowns = unknownsOf(rowCells[r]);
       if (unknowns.length === 0) continue;
@@ -146,7 +145,7 @@ export function solveLogically(puzzle: Puzzle): SolveResult {
         }
       }
     }
-    for (let c = 0; c < GRID_SIZE; c++) {
+    for (let c = 0; c < N; c++) {
       if (colConfirmed[c]) continue;
       const unknowns = unknownsOf(colCells[c]);
       if (unknowns.length === 0) continue;
@@ -163,14 +162,12 @@ export function solveLogically(puzzle: Puzzle): SolveResult {
     }
   }
 
-  const solution: boolean[][] = Array.from({ length: GRID_SIZE }, () =>
-    new Array(GRID_SIZE).fill(false)
-  );
-  for (let r = 0; r < GRID_SIZE; r++) {
-    for (let c = 0; c < GRID_SIZE; c++) {
+  const solution: boolean[][] = Array.from({ length: N }, () => new Array(N).fill(false));
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
       solution[r][c] = state[r][c] === 'confirmed';
     }
   }
 
-  return { solved: confirmedCount === DOG_COUNT, solution };
+  return { solved: confirmedCount === N, solution };
 }

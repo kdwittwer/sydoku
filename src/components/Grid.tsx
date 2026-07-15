@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { GRID_SIZE, type CellMark, type Puzzle } from '../game/types';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { STANDARD_SIZE, type CellMark, type Puzzle } from '../game/types';
 import Cell from './Cell';
 
-const REGION_COLORS = [
+// Preserves the exact hand-picked palette for the standard puzzle; larger
+// puzzles need more distinct colors than that fixed set has, so those get a
+// programmatically generated palette instead (see regionColors below).
+const STANDARD_REGION_COLORS = [
   '#f2a6a6',
   '#f4c68b',
   '#f2e08b',
@@ -14,6 +17,11 @@ const REGION_COLORS = [
   '#d69ae0',
   '#e8a6c3',
 ];
+
+function regionColors(count: number): string[] {
+  if (count === STANDARD_REGION_COLORS.length) return STANDARD_REGION_COLORS;
+  return Array.from({ length: count }, (_, i) => `hsl(${Math.round((i * 360) / count)}, 55%, 78%)`);
+}
 
 const BORDER_THIN = '1px solid rgba(0, 0, 0, 0.12)';
 const BORDER_THICK = '3px solid rgba(0, 0, 0, 0.65)';
@@ -31,18 +39,15 @@ interface GridProps {
 }
 
 function borderStyleFor(puzzle: Puzzle, row: number, col: number): React.CSSProperties {
+  const size = puzzle.size;
   const region = puzzle.regions[row][col];
   const top = row === 0 || puzzle.regions[row - 1][col] !== region ? BORDER_THICK : BORDER_THIN;
   const left = col === 0 || puzzle.regions[row][col - 1] !== region ? BORDER_THICK : BORDER_THIN;
   const bottom =
-    row === GRID_SIZE - 1 || puzzle.regions[row + 1][col] !== region ? BORDER_THICK : BORDER_THIN;
+    row === size - 1 || puzzle.regions[row + 1][col] !== region ? BORDER_THICK : BORDER_THIN;
   const right =
-    col === GRID_SIZE - 1 || puzzle.regions[row][col + 1] !== region ? BORDER_THICK : BORDER_THIN;
+    col === size - 1 || puzzle.regions[row][col + 1] !== region ? BORDER_THICK : BORDER_THIN;
   return { borderTop: top, borderLeft: left, borderBottom: bottom, borderRight: right };
-}
-
-function cellKey(row: number, col: number): number {
-  return row * GRID_SIZE + col;
 }
 
 interface DragState {
@@ -64,6 +69,14 @@ interface DragState {
  * the existing debounced single/double-click behavior — the debounce lets a
  * following double-click cancel it before it fires, so double-clicking
  * never visibly flickers to "safe" before landing on "dog".
+ *
+ * Large (beta) puzzles are exempted from touch-action: none (see the
+ * .grid--zoomable CSS) so touch devices get native pinch-zoom/pan, since a
+ * 20x20 grid doesn't fit comfortably on a phone otherwise — the trade-off
+ * is that drag-marking on touch becomes unreliable in that mode specifically
+ * (the browser may claim the gesture for panning instead of handing it to
+ * this pointer-based logic). Tap and double-tap marking, and drag-marking
+ * via mouse, are unaffected in every mode.
  */
 export default function Grid({
   puzzle,
@@ -75,6 +88,11 @@ export default function Grid({
   onAttemptDog,
   onSetMark,
 }: GridProps) {
+  const size = puzzle.size;
+  const isLarge = size > STANDARD_SIZE;
+  const colors = useMemo(() => regionColors(size), [size]);
+  const cellKey = useCallback((row: number, col: number) => row * size + col, [size]);
+
   const dragStateRef = useRef<DragState | null>(null);
   const pendingClickRef = useRef<{ row: number; col: number } | null>(null);
   const clickTimerRef = useRef<number | null>(null);
@@ -98,25 +116,28 @@ export default function Grid({
     [onToggleSafe]
   );
 
-  const handlePointerDownCell = useCallback((row: number, col: number) => {
-    suppressClickCellRef.current = null;
-    if (clickTimerRef.current !== null) {
-      window.clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-    }
-    pendingClickRef.current = { row, col };
+  const handlePointerDownCell = useCallback(
+    (row: number, col: number) => {
+      suppressClickCellRef.current = null;
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+      }
+      pendingClickRef.current = { row, col };
 
-    const mark = marksRef.current[row][col];
-    if (mark === 'dog') {
-      dragStateRef.current = null; // dragging never starts from (or paints over) a dog cell
-    } else {
-      dragStateRef.current = {
-        paintMark: mark === 'empty' ? 'safe' : 'empty',
-        visited: new Set([cellKey(row, col)]),
-        isDragging: false,
-      };
-    }
-  }, []);
+      const mark = marksRef.current[row][col];
+      if (mark === 'dog') {
+        dragStateRef.current = null; // dragging never starts from (or paints over) a dog cell
+      } else {
+        dragStateRef.current = {
+          paintMark: mark === 'empty' ? 'safe' : 'empty',
+          visited: new Set([cellKey(row, col)]),
+          isDragging: false,
+        };
+      }
+    },
+    [cellKey]
+  );
 
   const handleClickCell = useCallback(
     (row: number, col: number) => {
@@ -198,7 +219,7 @@ export default function Grid({
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
-  }, [onSetMark]);
+  }, [cellKey, onSetMark]);
 
   useEffect(() => {
     return () => {
@@ -208,10 +229,10 @@ export default function Grid({
 
   return (
     <div
-      className="grid"
+      className={`grid${isLarge ? ' grid--zoomable' : ''}`}
       style={{
-        gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
-        gridTemplateRows: `repeat(${GRID_SIZE}, 1fr)`,
+        gridTemplateColumns: `repeat(${size}, 1fr)`,
+        gridTemplateRows: `repeat(${size}, 1fr)`,
       }}
     >
       {marks.map((rowMarks, row) =>
@@ -222,7 +243,7 @@ export default function Grid({
             col={col}
             mark={mark}
             dogImage={dogImages[row][col]}
-            regionColor={REGION_COLORS[puzzle.regions[row][col]]}
+            regionColor={colors[puzzle.regions[row][col]]}
             wrong={wrongCell !== null && wrongCell.row === row && wrongCell.col === col}
             borderStyle={borderStyleFor(puzzle, row, col)}
             disabled={disabled}

@@ -93,11 +93,42 @@
   }
 }
 
+.app__progress-track {
+  width: min(70vw, 260px);
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border, #e5e4e7);
+  overflow: hidden;
+}
+
+.app__progress-fill {
+  height: 100%;
+  background: var(--accent, #aa3bff);
+  transition: width 0.3s ease;
+}
+
 .grid {
   display: grid;
   width: min(100cqw, 100cqh, 560px);
   aspect-ratio: 1 / 1;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+}
+
+/* Large (beta) puzzles: raise the size cap so the extra cells get real room
+   to breathe on tablets/desktops (still bounded by 100cqw/100cqh, so this
+   never reintroduces scrolling on small screens — it only matters once the
+   board area is actually bigger than 560px). Also permit native pinch-zoom
+   /pan instead of the drag-marking gesture's touch-action: none, since a
+   20x20 grid doesn't fit comfortably on a phone screen otherwise. Tap/
+   double-tap marking keeps working; drag-marking on touch specifically
+   becomes unreliable in this mode (the browser may claim the gesture for
+   panning first) — see the Grid component doc comment. */
+.grid--zoomable {
+  width: min(100cqw, 100cqh, 900px);
+}
+
+.grid--zoomable .cell {
+  touch-action: manipulation;
 }
 
 .cell {
@@ -249,14 +280,22 @@
   opacity: 0.75;
 }
 
+.app__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
 .app__button {
-  font-size: 15px;
-  padding: 8px 18px;
+  font-size: 14px;
+  padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid var(--border, #ccc);
   background: var(--accent-bg, #f2f2f2);
   color: var(--accent, #333);
   cursor: pointer;
+  white-space: nowrap;
   transition: border-color 0.2s;
 }
 

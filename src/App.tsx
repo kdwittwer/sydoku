@@ -3,19 +3,23 @@ import './App.css';
 import Grid from './components/Grid';
 import WinCelebration from './components/WinCelebration';
 import { pickRandomDogImage } from './game/dogImages';
+import type { GenerationProgress } from './game/generator';
 import { requestPuzzle } from './game/generatorClient';
 import { createEmptyDogImages, createEmptyMarks, isWon } from './game/logic';
 import { applyLoss, applyWin, loadStats, saveStats, type Stats } from './game/stats';
-import type { CellMark, Puzzle } from './game/types';
+import { LARGE_SIZE, STANDARD_SIZE, type CellMark, type Puzzle } from './game/types';
 
 const MAX_MISTAKES = 3;
 const WRONG_FLASH_MS = 500;
 
 export default function App() {
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
-  const [marks, setMarks] = useState<CellMark[][]>(() => createEmptyMarks());
-  const [dogImages, setDogImages] = useState<(string | null)[][]>(() => createEmptyDogImages());
+  const [marks, setMarks] = useState<CellMark[][]>(() => createEmptyMarks(STANDARD_SIZE));
+  const [dogImages, setDogImages] = useState<(string | null)[][]>(() =>
+    createEmptyDogImages(STANDARD_SIZE)
+  );
   const [isGenerating, setIsGenerating] = useState(true);
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
   const [mistakes, setMistakes] = useState(0);
   // The one cell currently showing the brief "wrong" shake/flash — cleared
   // automatically a moment later. Wrong guesses are never written into
@@ -44,19 +48,21 @@ export default function App() {
     saveStats(stats);
   }, [stats]);
 
-  const loadPuzzle = useCallback(async () => {
+  const loadPuzzle = useCallback(async (size: number) => {
     setIsGenerating(true);
-    const next = await requestPuzzle();
+    setGenerationProgress(null);
+    const next = await requestPuzzle(size, setGenerationProgress);
     setPuzzle(next);
-    setMarks(createEmptyMarks());
-    setDogImages(createEmptyDogImages());
+    setMarks(createEmptyMarks(next.size));
+    setDogImages(createEmptyDogImages(next.size));
     setMistakes(0);
     setWrongCell(null);
     setIsGenerating(false);
+    setGenerationProgress(null);
   }, []);
 
   useEffect(() => {
-    loadPuzzle();
+    loadPuzzle(STANDARD_SIZE);
   }, [loadPuzzle]);
 
   const toggleSafe = useCallback((row: number, col: number) => {
@@ -106,6 +112,10 @@ export default function App() {
     });
   }, []);
 
+  const progressPercent = generationProgress
+    ? Math.min(100, Math.round((generationProgress.elapsedMs / generationProgress.budgetMs) * 100))
+    : 0;
+
   return (
     <div className="app">
       <header className="app__header">
@@ -132,7 +142,19 @@ export default function App() {
         ) : (
           <div className="app__loading" role="status" aria-live="polite">
             <div className="app__spinner" />
-            <p>Generating puzzle&hellip;</p>
+            {generationProgress ? (
+              <>
+                <p>
+                  Generating large puzzle&hellip; ({generationProgress.cellsAssigned}/
+                  {generationProgress.totalCells} sections placed)
+                </p>
+                <div className="app__progress-track">
+                  <div className="app__progress-fill" style={{ width: `${progressPercent}%` }} />
+                </div>
+              </>
+            ) : (
+              <p>Generating puzzle&hellip;</p>
+            )}
           </div>
         )}
       </div>
@@ -148,9 +170,25 @@ export default function App() {
         <p className="app__stats">
           Wins: {stats.wins} &middot; Losses: {stats.losses} &middot; Streak: {stats.currentStreak}
         </p>
-        <button type="button" className="app__button" onClick={loadPuzzle} disabled={isGenerating}>
-          New puzzle
-        </button>
+        <div className="app__actions">
+          <button
+            type="button"
+            className="app__button"
+            onClick={() => loadPuzzle(STANDARD_SIZE)}
+            disabled={isGenerating}
+          >
+            New puzzle
+          </button>
+          <button
+            type="button"
+            className="app__button"
+            onClick={() => loadPuzzle(LARGE_SIZE)}
+            disabled={isGenerating}
+            title="20x20, 20 dogs, 20 sections — best-effort generation, may occasionally admit more than one valid solution"
+          >
+            New large puzzle (beta)
+          </button>
+        </div>
       </div>
 
       <WinCelebration active={won && !isGenerating} />
