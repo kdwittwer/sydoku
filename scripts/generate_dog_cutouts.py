@@ -26,7 +26,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DOGS_DIR = SCRIPT_DIR.parent / "src" / "assets" / "dogs"
 CUTOUTS_DIR = DOGS_DIR / "cutouts"
 MAX_DIMENSION = 500  # cap output size; these are just small in-cell markers
-PADDING_FRACTION = 0.06  # padding around the tight crop, as a fraction of the crop size
+PADDING_FRACTION = 0.02  # padding around the tight crop, as a fraction of the crop size
+# Kept small: the app displays these with object-fit: cover, filling the
+# cell edge to edge, so any padding baked into the source image just shows
+# up as dead space around the dog's head instead of getting cropped away.
 
 
 def tight_crop(image: Image.Image) -> Image.Image:
