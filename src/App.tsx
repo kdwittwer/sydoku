@@ -266,8 +266,7 @@ export default function App() {
       >
         <h2>Dog packs</h2>
         <p className="app__pack-dialog-hint">
-          Cutouts in the base set are always included. Turn packs off to exclude that dog's
-          photos from new finds.
+          Play with only the dogs you care about. One picture of Syd is included, no matter what.
         </p>
         <ul className="app__pack-list">
           {DOG_PACKS.map((pack) => (
