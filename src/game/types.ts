@@ -1,5 +1,4 @@
 export const STANDARD_SIZE = 10;
-export const LARGE_SIZE = 20;
 
 export type CellMark = 'empty' | 'safe' | 'dog';
 

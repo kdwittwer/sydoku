@@ -1,11 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { STANDARD_SIZE, type CellMark, type Puzzle } from '../game/types';
+import { useCallback, useEffect, useRef } from 'react';
+import type { CellMark, Puzzle } from '../game/types';
 import Cell from './Cell';
 
-// Preserves the exact hand-picked palette for the standard puzzle; larger
-// puzzles need more distinct colors than that fixed set has, so those get a
-// programmatically generated palette instead (see regionColors below).
-const STANDARD_REGION_COLORS = [
+const REGION_COLORS = [
   '#f2a6a6',
   '#f4c68b',
   '#f2e08b',
@@ -17,11 +14,6 @@ const STANDARD_REGION_COLORS = [
   '#d69ae0',
   '#e8a6c3',
 ];
-
-function regionColors(count: number): string[] {
-  if (count === STANDARD_REGION_COLORS.length) return STANDARD_REGION_COLORS;
-  return Array.from({ length: count }, (_, i) => `hsl(${Math.round((i * 360) / count)}, 55%, 78%)`);
-}
 
 const BORDER_THIN = '1px solid rgba(0, 0, 0, 0.12)';
 const BORDER_THICK = '3px solid rgba(0, 0, 0, 0.65)';
@@ -69,14 +61,6 @@ interface DragState {
  * the existing debounced single/double-click behavior — the debounce lets a
  * following double-click cancel it before it fires, so double-clicking
  * never visibly flickers to "safe" before landing on "dog".
- *
- * Large (beta) puzzles are exempted from touch-action: none (see the
- * .grid--zoomable CSS) so touch devices get native pinch-zoom/pan, since a
- * 20x20 grid doesn't fit comfortably on a phone otherwise — the trade-off
- * is that drag-marking on touch becomes unreliable in that mode specifically
- * (the browser may claim the gesture for panning instead of handing it to
- * this pointer-based logic). Tap and double-tap marking, and drag-marking
- * via mouse, are unaffected in every mode.
  */
 export default function Grid({
   puzzle,
@@ -89,8 +73,6 @@ export default function Grid({
   onSetMark,
 }: GridProps) {
   const size = puzzle.size;
-  const isLarge = size > STANDARD_SIZE;
-  const colors = useMemo(() => regionColors(size), [size]);
   const cellKey = useCallback((row: number, col: number) => row * size + col, [size]);
 
   const dragStateRef = useRef<DragState | null>(null);
@@ -229,7 +211,7 @@ export default function Grid({
 
   return (
     <div
-      className={`grid${isLarge ? ' grid--zoomable' : ''}`}
+      className="grid"
       style={{
         gridTemplateColumns: `repeat(${size}, 1fr)`,
         gridTemplateRows: `repeat(${size}, 1fr)`,
@@ -243,7 +225,7 @@ export default function Grid({
             col={col}
             mark={mark}
             dogImage={dogImages[row][col]}
-            regionColor={colors[puzzle.regions[row][col]]}
+            regionColor={REGION_COLORS[puzzle.regions[row][col]]}
             wrong={wrongCell !== null && wrongCell.row === row && wrongCell.col === col}
             borderStyle={borderStyleFor(puzzle, row, col)}
             disabled={disabled}

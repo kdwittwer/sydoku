@@ -3,11 +3,10 @@ import './App.css';
 import Grid from './components/Grid';
 import WinCelebration from './components/WinCelebration';
 import { pickRandomDogImage } from './game/dogImages';
-import type { GenerationProgress } from './game/generator';
 import { requestPuzzle } from './game/generatorClient';
 import { createEmptyDogImages, createEmptyMarks, isWon } from './game/logic';
 import { applyLoss, applyWin, loadStats, saveStats, type Stats } from './game/stats';
-import { LARGE_SIZE, STANDARD_SIZE, type CellMark, type Puzzle } from './game/types';
+import { STANDARD_SIZE, type CellMark, type Puzzle } from './game/types';
 
 const MAX_MISTAKES = 3;
 const WRONG_FLASH_MS = 500;
@@ -19,9 +18,7 @@ export default function App() {
     createEmptyDogImages(STANDARD_SIZE)
   );
   const [isGenerating, setIsGenerating] = useState(true);
-  const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [lastRequestedSize, setLastRequestedSize] = useState(STANDARD_SIZE);
   const [mistakes, setMistakes] = useState(0);
   // The one cell currently showing the brief "wrong" shake/flash — cleared
   // automatically a moment later. Wrong guesses are never written into
@@ -32,12 +29,6 @@ export default function App() {
 
   const won = useMemo(() => (puzzle ? isWon(puzzle, marks) : false), [puzzle, marks]);
   const lost = mistakes >= MAX_MISTAKES;
-  // Large puzzles are generated best-effort (see generator.ts) and aren't
-  // verified solvable by pure deduction the way standard puzzles are — a
-  // player can get stuck with no logical next move. "Reveal a dog" below is
-  // the honest fallback for that, rather than pretending every large puzzle
-  // is crackable by logic alone.
-  const isLarge = puzzle ? puzzle.size > STANDARD_SIZE : false;
 
   // Fires exactly once per game: `won`/`lost` only flip true -> false again
   // when loadPuzzle() resets marks/mistakes for the next puzzle, so this
@@ -56,13 +47,11 @@ export default function App() {
     saveStats(stats);
   }, [stats]);
 
-  const loadPuzzle = useCallback(async (size: number) => {
-    setLastRequestedSize(size);
+  const loadPuzzle = useCallback(async () => {
     setIsGenerating(true);
-    setGenerationProgress(null);
     setGenerationError(null);
     try {
-      const next = await requestPuzzle(size, setGenerationProgress);
+      const next = await requestPuzzle();
       setPuzzle(next);
       setMarks(createEmptyMarks(next.size));
       setDogImages(createEmptyDogImages(next.size));
@@ -81,12 +70,11 @@ export default function App() {
       );
     } finally {
       setIsGenerating(false);
-      setGenerationProgress(null);
     }
   }, []);
 
   useEffect(() => {
-    loadPuzzle(STANDARD_SIZE);
+    loadPuzzle();
   }, [loadPuzzle]);
 
   const toggleSafe = useCallback((row: number, col: number) => {
@@ -127,30 +115,6 @@ export default function App() {
     [marks, puzzle]
   );
 
-  const revealDog = useCallback(() => {
-    if (!puzzle) return;
-    const candidates: { row: number; col: number }[] = [];
-    for (let row = 0; row < puzzle.size; row++) {
-      for (let col = 0; col < puzzle.size; col++) {
-        if (puzzle.dogs[row][col] && marks[row][col] !== 'dog') {
-          candidates.push({ row, col });
-        }
-      }
-    }
-    if (candidates.length === 0) return;
-    const { row, col } = candidates[Math.floor(Math.random() * candidates.length)];
-    setMarks((prev) => {
-      const next = prev.map((r) => [...r]);
-      next[row][col] = 'dog';
-      return next;
-    });
-    setDogImages((prev) => {
-      const next = prev.map((r) => [...r]);
-      next[row][col] = pickRandomDogImage();
-      return next;
-    });
-  }, [puzzle, marks]);
-
   const setMark = useCallback((row: number, col: number, mark: CellMark) => {
     setMarks((prev) => {
       if (prev[row][col] === mark) return prev;
@@ -160,18 +124,14 @@ export default function App() {
     });
   }, []);
 
-  const progressPercent = generationProgress
-    ? Math.min(100, Math.round((generationProgress.elapsedMs / generationProgress.budgetMs) * 100))
-    : 0;
-
   return (
     <div className="app">
       <header className="app__header">
         <h1>Sydoku</h1>
         <p>
-          Find all {puzzle?.size ?? STANDARD_SIZE} dogs — one per row, column, and section, none
-          touching (even diagonally). Click for safe, double-click for dog, drag to mark many at
-          once. 3 wrong guesses and the puzzle's lost.
+          Find all {STANDARD_SIZE} dogs — one per row, column, and section, none touching (even
+          diagonally). Click for safe, double-click for dog, drag to mark many at once. 3 wrong
+          guesses and the puzzle's lost.
         </p>
       </header>
 
@@ -179,28 +139,12 @@ export default function App() {
         {isGenerating ? (
           <div className="app__loading" role="status" aria-live="polite">
             <div className="app__spinner" />
-            {generationProgress ? (
-              <>
-                <p>
-                  Generating large puzzle&hellip; ({generationProgress.cellsAssigned}/
-                  {generationProgress.totalCells} sections placed)
-                </p>
-                <div className="app__progress-track">
-                  <div className="app__progress-fill" style={{ width: `${progressPercent}%` }} />
-                </div>
-              </>
-            ) : (
-              <p>Generating puzzle&hellip;</p>
-            )}
+            <p>Generating puzzle&hellip;</p>
           </div>
         ) : generationError !== null ? (
           <div className="app__loading" role="alert">
             <p>😕 Couldn't generate a puzzle: {generationError}</p>
-            <button
-              type="button"
-              className="app__button"
-              onClick={() => loadPuzzle(lastRequestedSize)}
-            >
+            <button type="button" className="app__button" onClick={() => loadPuzzle()}>
               Retry
             </button>
           </div>
@@ -234,39 +178,10 @@ export default function App() {
           <span className="app__stat app__stat--streak">Streak: {stats.currentStreak}</span>
         </p>
         <div className="app__actions">
-          <button
-            type="button"
-            className="app__button"
-            onClick={() => loadPuzzle(STANDARD_SIZE)}
-            disabled={isGenerating}
-          >
+          <button type="button" className="app__button" onClick={() => loadPuzzle()} disabled={isGenerating}>
             New puzzle
           </button>
-          <button
-            type="button"
-            className="app__button"
-            onClick={() => loadPuzzle(LARGE_SIZE)}
-            disabled={isGenerating}
-            title="20x20, 20 dogs, 20 sections — best-effort generation. Not verified solvable by logic alone; use Reveal a dog if you get stuck."
-          >
-            New large puzzle (beta)
-          </button>
         </div>
-        {isLarge && !won && !lost && (
-          <div className="app__hint">
-            <p className="app__hint-text">
-              Large puzzles aren't guaranteed solvable by logic alone.
-            </p>
-            <button
-              type="button"
-              className="app__button app__button--hint"
-              onClick={revealDog}
-              disabled={isGenerating}
-            >
-              Reveal a dog
-            </button>
-          </div>
-        )}
       </div>
 
       <WinCelebration active={won && !isGenerating} />

@@ -4,11 +4,8 @@ import { generatePuzzle, type GenerateRequest, type GenerateResponse } from './g
 declare const self: DedicatedWorkerGlobalScope;
 
 self.onmessage = (e: MessageEvent<GenerateRequest>) => {
-  const { requestId, size } = e.data;
-  const puzzle = generatePuzzle(size, (progress) => {
-    const message: GenerateResponse = { type: 'progress', requestId, progress };
-    self.postMessage(message);
-  });
-  const message: GenerateResponse = { type: 'done', requestId, puzzle };
+  const { requestId } = e.data;
+  const puzzle = generatePuzzle();
+  const message: GenerateResponse = { requestId, puzzle };
   self.postMessage(message);
 };

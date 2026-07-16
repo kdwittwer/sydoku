@@ -1,14 +1,6 @@
 import { STANDARD_SIZE, type Position, type Puzzle } from './types';
 import { solveLogically } from './solver';
 
-export interface GenerationProgress {
-  elapsedMs: number;
-  budgetMs: number;
-  cellsAssigned: number;
-  totalCells: number;
-  refillCount: number;
-}
-
 function shuffled<T>(items: T[]): T[] {
   const arr = [...items];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -60,13 +52,11 @@ const ORTHOGONAL_NEIGHBORS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Standard pipeline (used for STANDARD_SIZE only): provably unique and
-// logic-solvable, via full enumeration of every valid dog placement. This is
-// what makes uniqueness achievable at all (see buildGreedyRegions), but the
-// enumeration itself is only tractable at this size — it already reaches
-// ~64 million placements at size 12, and grows roughly ~130x for every +2
-// after that. See generateLargePuzzle below for how larger sizes cope
-// without it.
+// Provably unique and logic-solvable, via full enumeration of every valid
+// dog placement. This is what makes uniqueness achievable at all (see
+// buildGreedyRegions), but the enumeration itself is only tractable at this
+// grid size — it already reaches ~64 million placements at size 12, and
+// grows roughly ~130x for every +2 after that.
 // ---------------------------------------------------------------------------
 
 const allValidPlacementsCache = new Map<number, number[][]>();
@@ -224,12 +214,10 @@ function buildGreedyRegions(size: number, dogCols: number[], maxRegionSize: numb
 }
 
 /**
- * Assigns any still-unclaimed cells to a bordering region. For the standard
- * pipeline this is a rare defensive fallback (growth should always claim
- * every cell); for the large pipeline it can be handling a real chunk of
- * the grid when the time budget runs out mid-growth, so it prefers each
- * unclaimed cell's *smallest* bordering region rather than just the first
- * one found, to avoid one region snowballing through the entire leftover
+ * Assigns any still-unclaimed cells to a bordering region. This is a rare
+ * defensive fallback — growth should always claim every cell — but prefers
+ * each unclaimed cell's *smallest* bordering region rather than just the
+ * first one found, to avoid one region snowballing through the leftover
  * area.
  */
 function fillUnclaimed(size: number, regions: number[][]): void {
@@ -423,348 +411,8 @@ function generateStandardPuzzle(): Puzzle {
   return puzzle;
 }
 
-// ---------------------------------------------------------------------------
-// Large-puzzle pipeline (beta): full enumeration is impossible at this scale
-// (already ~64 million placements at size 12), so there's no way to prove
-// uniqueness the way the standard pipeline does. Instead this searches for
-// competing placements on demand via targeted backtracking (finding *a*
-// second solution is usually fast even when proving there isn't one would
-// be expensive) and greedily kills whichever ones it's found so far —
-// genuinely better than an unconstrained random partition, but not a
-// guarantee. See CLAUDE.md / commit history for the empirical case against
-// chasing a full guarantee here.
-// ---------------------------------------------------------------------------
-
-function findConsistentPlacements(
-  size: number,
-  regions: number[][],
-  trueCols: number[],
-  cap: number,
-  timeLimitMs: number
-): number[][] {
-  const usedCols = new Array(size).fill(false);
-  const usedRegions = new Array(size).fill(false);
-  const placedInRow = new Array(size).fill(-1);
-  const found: number[][] = [];
-  const deadline = performance.now() + timeLimitMs;
-  let aborted = false;
-
-  function backtrack(row: number) {
-    if (found.length >= cap || aborted) return;
-    if (row === size) {
-      let isTrue = true;
-      for (let r = 0; r < size; r++) {
-        if (placedInRow[r] !== trueCols[r]) {
-          isTrue = false;
-          break;
-        }
-      }
-      if (!isTrue) found.push([...placedInRow]);
-      return;
-    }
-    const cols = shuffled(Array.from({ length: size }, (_, c) => c));
-    for (const col of cols) {
-      if (found.length >= cap || aborted) return;
-      if (usedCols[col]) continue;
-      if (row > 0 && Math.abs(placedInRow[row - 1] - col) <= 1) continue;
-      const region = regions[row][col];
-      if (region !== -1 && usedRegions[region]) continue;
-      usedCols[col] = true;
-      placedInRow[row] = col;
-      if (region !== -1) usedRegions[region] = true;
-      backtrack(row + 1);
-      usedCols[col] = false;
-      if (region !== -1) usedRegions[region] = false;
-      if ((row & 3) === 0 && performance.now() > deadline) {
-        aborted = true;
-        return;
-      }
-    }
-  }
-  backtrack(0);
-  return found;
-}
-
-/**
- * Incremental bookkeeping for a pool of known-alive competing placements:
- * counts[alt*size+region] tracks how many of `alt`'s dogs currently sit in
- * `region`; alive[alt] flips to 0 the moment any region reaches 2 (two dogs
- * from the same alternate solution can never coexist in one region). Mirrors
- * the standard pipeline's bookkeeping, generalized to a pool that grows
- * incrementally instead of being enumerated once upfront.
- */
-class AlternatePool {
-  private size: number;
-  private alts: number[][] = [];
-  private alive: Uint8Array = new Uint8Array(0);
-  private counts: Uint8Array = new Uint8Array(0);
-  private byCell: number[][][];
-
-  constructor(size: number) {
-    this.size = size;
-    this.byCell = Array.from({ length: size }, () => Array.from({ length: size }, () => []));
-  }
-
-  addMany(newAlts: number[][], regions: number[][]): void {
-    const size = this.size;
-    const startIdx = this.alts.length;
-    const total = startIdx + newAlts.length;
-    const newAlive = new Uint8Array(total);
-    newAlive.set(this.alive);
-    const newCounts = new Uint8Array(total * size);
-    newCounts.set(this.counts);
-    this.alive = newAlive;
-    this.counts = newCounts;
-
-    for (let k = 0; k < newAlts.length; k++) {
-      const ai = startIdx + k;
-      const alt = newAlts[k];
-      this.alts.push(alt);
-      this.alive[ai] = 1;
-      for (let r = 0; r < size; r++) {
-        this.byCell[r][alt[r]].push(ai);
-        const region = regions[r][alt[r]];
-        if (region !== -1) {
-          const idx = ai * size + region;
-          this.counts[idx]++;
-          if (this.counts[idx] >= 2) this.alive[ai] = 0;
-        }
-      }
-    }
-  }
-
-  applyAssignment(row: number, col: number, region: number): void {
-    const size = this.size;
-    for (const ai of this.byCell[row][col]) {
-      if (!this.alive[ai]) continue;
-      const idx = ai * size + region;
-      this.counts[idx]++;
-      if (this.counts[idx] >= 2) this.alive[ai] = 0;
-    }
-  }
-
-  /** How many currently-alive alternates with a dog at (row,col) would die if it joined `region`. */
-  kills(row: number, col: number, region: number): number {
-    const size = this.size;
-    let kills = 0;
-    for (const ai of this.byCell[row][col]) {
-      if (this.alive[ai] && this.counts[ai * size + region] >= 1) kills++;
-    }
-    return kills;
-  }
-
-  aliveCount(): number {
-    let c = 0;
-    for (let i = 0; i < this.alive.length; i++) if (this.alive[i]) c++;
-    return c;
-  }
-}
-
-interface GuidedGrowthOptions {
-  minAlivePool: number;
-  refillBatch: number;
-  refillTimeMs: number;
-  deadline: number;
-  maxRegionSize: number;
-  onProgress?: (progress: GenerationProgress) => void;
-}
-
-function buildRegionsGuided(
-  size: number,
-  dogCols: number[],
-  opts: GuidedGrowthOptions
-): { regions: number[][]; refillCount: number } {
-  const { minAlivePool, refillBatch, refillTimeMs, deadline, maxRegionSize, onProgress } = opts;
-  const startTime = performance.now();
-  const budgetMs = deadline - startTime;
-
-  const regions: number[][] = Array.from({ length: size }, () => new Array(size).fill(-1));
-  const liveRegionSize = new Array(size).fill(1);
-  dogCols.forEach((col, row) => {
-    regions[row][col] = row;
-  });
-
-  const pool = new AlternatePool(size);
-  let refillCount = 0;
-  const totalCells = size * size;
-  let assignedCells = size;
-
-  const reportProgress = () => {
-    onProgress?.({
-      elapsedMs: performance.now() - startTime,
-      budgetMs,
-      cellsAssigned: assignedCells,
-      totalCells,
-      refillCount,
-    });
-  };
-
-  const refill = () => {
-    const remainingBudget = deadline - performance.now();
-    if (remainingBudget <= 0) return;
-    const found = findConsistentPlacements(
-      size,
-      regions,
-      dogCols,
-      refillBatch,
-      Math.min(refillTimeMs, remainingBudget)
-    );
-    pool.addMany(found, regions);
-    refillCount++;
-    reportProgress();
-  };
-  refill();
-
-  const frontier = new Map<number, Set<number>>();
-  const addFrontier = (row: number, col: number, region: number) => {
-    for (const [dr, dc] of ORTHOGONAL_NEIGHBORS) {
-      const r = row + dr;
-      const c = col + dc;
-      if (r >= 0 && r < size && c >= 0 && c < size && regions[r][c] === -1) {
-        const key = r * size + c;
-        let set = frontier.get(key);
-        if (!set) {
-          set = new Set();
-          frontier.set(key, set);
-        }
-        set.add(region);
-      }
-    }
-  };
-  dogCols.forEach((col, row) => addFrontier(row, col, row));
-
-  let remaining = size * size - size;
-  while (remaining > 0 && frontier.size > 0) {
-    if (performance.now() >= deadline) break;
-    if (pool.aliveCount() < minAlivePool) refill();
-
-    let bestKey = -1;
-    let bestRegion = -1;
-    let bestKills = -1;
-    let anyKey = -1;
-    let anyRegion = -1;
-    for (const [key, regionSet] of frontier) {
-      const r = Math.floor(key / size);
-      const c = key % size;
-      for (const region of regionSet) {
-        if (anyKey === -1) {
-          anyKey = key;
-          anyRegion = region;
-        }
-        if (liveRegionSize[region] >= maxRegionSize) continue;
-        const k = pool.kills(r, c, region);
-        if (k > bestKills) {
-          bestKills = k;
-          bestKey = key;
-          bestRegion = region;
-        }
-      }
-    }
-    const chosenKey = bestKey === -1 ? anyKey : bestKey;
-    const chosenRegion = bestKey === -1 ? anyRegion : bestRegion;
-    const r = Math.floor(chosenKey / size);
-    const c = chosenKey % size;
-    regions[r][c] = chosenRegion;
-    liveRegionSize[chosenRegion]++;
-    frontier.delete(chosenKey);
-    remaining--;
-    assignedCells++;
-    addFrontier(r, c, chosenRegion);
-    pool.applyAssignment(r, c, chosenRegion);
-  }
-
-  fillUnclaimed(size, regions);
-  reportProgress();
-  return { regions, refillCount };
-}
-
-const LARGE_GENERATION_BUDGET_MS = 25000;
-
-/**
- * Balance-only version of rebalanceRegions for the large pipeline: swaps
- * boundary cells from oversized to undersized regions, checking only that
- * the donor region stays connected. Skips the solver-validity check the
- * standard pipeline's rebalance does, since there's no solvability
- * guarantee here to protect in the first place — so this can be purely
- * cosmetic and much cheaper.
- */
-function rebalanceRegionsFast(size: number, regions: number[][], dogs: boolean[][], deadline: number): void {
-  const targetRegionSize = size;
-
-  while (performance.now() < deadline) {
-    const sizes = regionSizes(size, regions);
-    if (Math.max(...sizes) - Math.min(...sizes) <= 1) return;
-
-    const oversizedFirst = Array.from({ length: size }, (_, i) => i).sort((a, b) => sizes[b] - sizes[a]);
-
-    let swapped = false;
-    for (const region of oversizedFirst) {
-      if (sizes[region] <= targetRegionSize) break;
-      if (performance.now() >= deadline) return;
-
-      const candidates: { cell: Position; targetRegion: number }[] = [];
-      for (let r = 0; r < size; r++) {
-        for (let c = 0; c < size; c++) {
-          if (regions[r][c] !== region || dogs[r][c]) continue;
-          let smallestNeighbor = -1;
-          for (const [dr, dc] of ORTHOGONAL_NEIGHBORS) {
-            const nr = r + dr;
-            const nc = c + dc;
-            if (nr < 0 || nr >= size || nc < 0 || nc >= size) continue;
-            const neighborRegion = regions[nr][nc];
-            if (neighborRegion === region || sizes[neighborRegion] >= sizes[region]) continue;
-            if (smallestNeighbor === -1 || sizes[neighborRegion] < sizes[smallestNeighbor]) {
-              smallestNeighbor = neighborRegion;
-            }
-          }
-          if (smallestNeighbor !== -1) candidates.push({ cell: { row: r, col: c }, targetRegion: smallestNeighbor });
-        }
-      }
-
-      for (const { cell, targetRegion } of shuffled(candidates)) {
-        if (performance.now() >= deadline) return;
-        if (!isConnectedWithoutCell(size, regions, region, cell.row, cell.col)) continue;
-        regions[cell.row][cell.col] = targetRegion;
-        swapped = true;
-        break;
-      }
-      if (swapped) break;
-    }
-    if (!swapped) return;
-  }
-}
-
-const LARGE_REBALANCE_BUDGET_MS = 3000;
-
-function generateLargePuzzle(size: number, onProgress?: (progress: GenerationProgress) => void): Puzzle {
-  const dogCols = generateDogPositions(size);
-  const dogs: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
-  dogCols.forEach((col, row) => {
-    dogs[row][col] = true;
-  });
-
-  const targetRegionSize = size; // size*size cells / size regions
-  const growthDeadline = performance.now() + LARGE_GENERATION_BUDGET_MS;
-  const { regions } = buildRegionsGuided(size, dogCols, {
-    minAlivePool: 150,
-    refillBatch: 250,
-    refillTimeMs: 400,
-    deadline: growthDeadline,
-    maxRegionSize: 3 * targetRegionSize,
-    onProgress,
-  });
-
-  rebalanceRegionsFast(size, regions, dogs, performance.now() + LARGE_REBALANCE_BUDGET_MS);
-
-  return { size, dogs, regions };
-}
-
-export function generatePuzzle(
-  size: number = STANDARD_SIZE,
-  onProgress?: (progress: GenerationProgress) => void
-): Puzzle {
-  if (size === STANDARD_SIZE) return generateStandardPuzzle();
-  return generateLargePuzzle(size, onProgress);
+export function generatePuzzle(): Puzzle {
+  return generateStandardPuzzle();
 }
 
 // Shared worker <-> main-thread message shapes. Defined here (rather than
@@ -774,9 +422,9 @@ export function generatePuzzle(
 // boundary; generator.ts itself compiles cleanly under both.
 export interface GenerateRequest {
   requestId: number;
-  size: number;
 }
 
-export type GenerateResponse =
-  | { type: 'progress'; requestId: number; progress: GenerationProgress }
-  | { type: 'done'; requestId: number; puzzle: Puzzle };
+export interface GenerateResponse {
+  requestId: number;
+  puzzle: Puzzle;
+}
