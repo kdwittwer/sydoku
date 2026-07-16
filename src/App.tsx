@@ -229,13 +229,16 @@ export default function App() {
       </div>
 
       <div className="app__footer">
-        {won && <p className="app__won">🐾 You found every dog!</p>}
-        {lost && <p className="app__lost">❌ Out of guesses! Start a new puzzle to try again.</p>}
-        {!won && !lost && (
-          <p className="app__mistakes" aria-live="polite">
-            Mistakes: {mistakes} / {maxMistakes}
-          </p>
-        )}
+        <p
+          className={`app__status${won ? ' app__status--won' : ''}${lost ? ' app__status--lost' : ''}`}
+          aria-live="polite"
+        >
+          {won
+            ? '🐾 You found every dog!'
+            : lost
+              ? '❌ Out of guesses! Start a new puzzle to try again.'
+              : `Mistakes: ${mistakes} / ${maxMistakes}`}
+        </p>
         <p className="app__stats">
           <span className="app__stat app__stat--wins">Wins: {stats.wins}</span>
           <span className="app__stat-sep">&middot;</span>
@@ -253,17 +256,16 @@ export default function App() {
             </button>
           )}
         </div>
-        {!hardModeLocked && (
-          <label className="app__hard-mode">
-            <input
-              type="checkbox"
-              checked={hardMode}
-              onChange={(e) => setHardMode(e.target.checked)}
-              disabled={isGenerating}
-            />
-            Hard mode (no mistakes allowed)
-          </label>
-        )}
+        <label className={`app__hard-mode${hardModeLocked ? ' app__hard-mode--hidden' : ''}`}>
+          <input
+            type="checkbox"
+            checked={hardMode}
+            onChange={(e) => setHardMode(e.target.checked)}
+            disabled={isGenerating || hardModeLocked}
+            tabIndex={hardModeLocked ? -1 : undefined}
+          />
+          Hard mode (no mistakes allowed)
+        </label>
       </div>
 
       <dialog

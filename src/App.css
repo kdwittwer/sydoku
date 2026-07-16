@@ -3,17 +3,21 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(6px, 2dvh, 16px);
+  /* Tightened from clamp(6px, 2dvh, 16px) — every px here is a px the board
+     (flex: 1 1 auto below) doesn't get, and on phones the footer's grown
+     enough (stats, hard mode, dog packs) that vertical space is usually the
+     binding constraint on grid size, not width. */
+  gap: clamp(4px, 1.2dvh, 14px);
   /* apple-mobile-web-app-status-bar-style is black-translucent (see
      index.html) so the status bar / notch / dynamic island overlays the
      page instead of pushing it down — without env(safe-area-inset-*) here,
      the header renders partly underneath it, especially as an installed
      PWA in standalone mode. viewport-fit=cover (also in index.html) is
      required for these to report real values instead of always 0. */
-  padding: calc(clamp(8px, 2dvh, 20px) + env(safe-area-inset-top, 0px))
-    calc(16px + env(safe-area-inset-right, 0px))
-    calc(clamp(8px, 2dvh, 20px) + env(safe-area-inset-bottom, 0px))
-    calc(16px + env(safe-area-inset-left, 0px));
+  padding: calc(clamp(6px, 1.5dvh, 18px) + env(safe-area-inset-top, 0px))
+    calc(10px + env(safe-area-inset-right, 0px))
+    calc(clamp(6px, 1.5dvh, 18px) + env(safe-area-inset-bottom, 0px))
+    calc(10px + env(safe-area-inset-left, 0px));
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -43,15 +47,15 @@
 }
 
 .app__header h1 {
-  margin: 0 0 4px;
-  font-size: clamp(1.5rem, 5dvh, 2.25rem);
+  margin: 0 0 2px;
+  font-size: clamp(1.25rem, 4dvh, 2.25rem);
 }
 
 .app__header p {
   margin: 0;
   color: var(--text, #555);
-  line-height: 1.4;
-  font-size: clamp(0.8rem, 2dvh, 1rem);
+  line-height: 1.3;
+  font-size: clamp(0.7rem, 1.8dvh, 1rem);
 }
 
 .app__board {
@@ -220,24 +224,30 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 6px;
 }
 
-.app__won {
-  font-size: 1.1rem;
-  font-weight: 600;
+/* Always mounted (mistakes / won / lost share one slot, swapped by content
+   rather than conditional mount) with a two-line min-height reserved, so
+   this can never change the footer's height and shove the grid — see the
+   .app__hard-mode--hidden comment below for the same reasoning applied to
+   the hard mode row. */
+.app__status {
   margin: 0;
-}
-
-.app__mistakes {
-  margin: 0;
+  min-height: calc(14px * 1.4 * 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   font-size: 14px;
   color: var(--text, #555);
 }
 
-.app__lost {
-  margin: 0;
-  font-size: 14px;
+.app__status--won {
+  font-weight: 600;
+}
+
+.app__status--lost {
   color: #d21f1f;
   font-weight: 600;
 }
@@ -315,6 +325,13 @@
   color: var(--text, #555);
   cursor: pointer;
   user-select: none;
+}
+
+/* Hidden via visibility (not conditional mounting) once a dog's been found,
+   so the row keeps its layout space reserved instead of the footer — and
+   therefore the grid above it — shifting size when it disappears. */
+.app__hard-mode--hidden {
+  visibility: hidden;
 }
 
 .app__pack-dialog {
