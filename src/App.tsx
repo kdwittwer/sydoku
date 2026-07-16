@@ -5,10 +5,12 @@ import WinCelebration from './components/WinCelebration';
 import { pickRandomDogImage } from './game/dogImages';
 import { requestPuzzle } from './game/generatorClient';
 import { createEmptyDogImages, createEmptyMarks, isWon } from './game/logic';
+import { loadHardMode, saveHardMode } from './game/settings';
 import { applyLoss, applyWin, loadStats, saveStats, type Stats } from './game/stats';
 import { STANDARD_SIZE, type CellMark, type Puzzle } from './game/types';
 
-const MAX_MISTAKES = 3;
+const NORMAL_MAX_MISTAKES = 3;
+const HARD_MODE_MAX_MISTAKES = 1;
 const WRONG_FLASH_MS = 500;
 
 export default function App() {
@@ -26,9 +28,15 @@ export default function App() {
   // construction; this is purely a transient visual, not game state.
   const [wrongCell, setWrongCell] = useState<{ row: number; col: number } | null>(null);
   const [stats, setStats] = useState<Stats>(() => loadStats());
+  const [hardMode, setHardMode] = useState<boolean>(() => loadHardMode());
 
   const won = useMemo(() => (puzzle ? isWon(puzzle, marks) : false), [puzzle, marks]);
-  const lost = mistakes >= MAX_MISTAKES;
+  const maxMistakes = hardMode ? HARD_MODE_MAX_MISTAKES : NORMAL_MAX_MISTAKES;
+  const lost = mistakes >= maxMistakes;
+  // Once a dog's been correctly found, hard mode can no longer be toggled —
+  // otherwise a player could flip it off right before a risky guess. Marks
+  // reset to empty on every new puzzle, so this naturally reappears then.
+  const hardModeLocked = useMemo(() => marks.some((row) => row.includes('dog')), [marks]);
 
   // Fires exactly once per game: `won`/`lost` only flip true -> false again
   // when loadPuzzle() resets marks/mistakes for the next puzzle, so this
@@ -46,6 +54,10 @@ export default function App() {
   useEffect(() => {
     saveStats(stats);
   }, [stats]);
+
+  useEffect(() => {
+    saveHardMode(hardMode);
+  }, [hardMode]);
 
   const loadPuzzle = useCallback(async () => {
     setIsGenerating(true);
@@ -103,7 +115,7 @@ export default function App() {
           return next;
         });
       } else {
-        setMistakes((m) => Math.min(m + 1, MAX_MISTAKES));
+        setMistakes((m) => Math.min(m + 1, maxMistakes));
         setWrongCell({ row, col });
         window.setTimeout(() => {
           setWrongCell((current) =>
@@ -112,7 +124,7 @@ export default function App() {
         }, WRONG_FLASH_MS);
       }
     },
-    [marks, puzzle]
+    [marks, puzzle, maxMistakes]
   );
 
   const setMark = useCallback((row: number, col: number, mark: CellMark) => {
@@ -130,8 +142,10 @@ export default function App() {
         <h1>Sydoku</h1>
         <p>
           Find all {STANDARD_SIZE} dogs — one per row, column, and section, none touching (even
-          diagonally). Click for safe, double-click for dog, drag to mark many at once. 3 wrong
-          guesses and the puzzle's lost.
+          diagonally). Click for safe, double-click for dog, drag to mark many at once.{' '}
+          {hardMode
+            ? 'Hard mode: one wrong guess and the puzzle is lost.'
+            : `${NORMAL_MAX_MISTAKES} wrong guesses and the puzzle's lost.`}
         </p>
       </header>
 
@@ -167,7 +181,7 @@ export default function App() {
         {lost && <p className="app__lost">❌ Out of guesses! Start a new puzzle to try again.</p>}
         {!won && !lost && (
           <p className="app__mistakes" aria-live="polite">
-            Mistakes: {mistakes} / {MAX_MISTAKES}
+            Mistakes: {mistakes} / {maxMistakes}
           </p>
         )}
         <p className="app__stats">
@@ -182,6 +196,17 @@ export default function App() {
             New puzzle
           </button>
         </div>
+        {!hardModeLocked && (
+          <label className="app__hard-mode">
+            <input
+              type="checkbox"
+              checked={hardMode}
+              onChange={(e) => setHardMode(e.target.checked)}
+              disabled={isGenerating}
+            />
+            Hard mode (no mistakes allowed)
+          </label>
+        )}
       </div>
 
       <WinCelebration active={won && !isGenerating} />

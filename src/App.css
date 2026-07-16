@@ -306,3 +306,17 @@
   cursor: default;
   opacity: 0.6;
 }
+
+.app__hard-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text, #555);
+  cursor: pointer;
+  user-select: none;
+}
+
+.app__hard-mode input {
+  cursor: pointer;
+}
