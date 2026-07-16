@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Grid from './components/Grid';
 import WinCelebration from './components/WinCelebration';
-import { pickRandomDogImage } from './game/dogImages';
+import { DOG_PACKS, getActiveDogImages, pickRandomDogImage } from './game/dogImages';
 import { requestPuzzle } from './game/generatorClient';
 import { createEmptyDogImages, createEmptyMarks, isWon } from './game/logic';
-import { loadHardMode, saveHardMode } from './game/settings';
+import {
+  loadDisabledDogPacks,
+  loadHardMode,
+  saveDisabledDogPacks,
+  saveHardMode,
+} from './game/settings';
 import { applyLoss, applyWin, loadStats, saveStats, type Stats } from './game/stats';
 import { STANDARD_SIZE, type CellMark, type Puzzle } from './game/types';
 
@@ -29,6 +34,11 @@ export default function App() {
   const [wrongCell, setWrongCell] = useState<{ row: number; col: number } | null>(null);
   const [stats, setStats] = useState<Stats>(() => loadStats());
   const [hardMode, setHardMode] = useState<boolean>(() => loadHardMode());
+  const [disabledDogPacks, setDisabledDogPacks] = useState<Set<string>>(() =>
+    loadDisabledDogPacks()
+  );
+  const [showDogPackMenu, setShowDogPackMenu] = useState(false);
+  const dogPackDialogRef = useRef<HTMLDialogElement>(null);
 
   const won = useMemo(() => (puzzle ? isWon(puzzle, marks) : false), [puzzle, marks]);
   const maxMistakes = hardMode ? HARD_MODE_MAX_MISTAKES : NORMAL_MAX_MISTAKES;
@@ -37,6 +47,13 @@ export default function App() {
   // otherwise a player could flip it off right before a risky guess. Marks
   // reset to empty on every new puzzle, so this naturally reappears then.
   const hardModeLocked = useMemo(() => marks.some((row) => row.includes('dog')), [marks]);
+  // Which photo shows up for a correctly-found dog is purely cosmetic, so
+  // (unlike hard mode) pack selection stays toggleable for the whole game,
+  // not just before the first find.
+  const activeDogImages = useMemo(
+    () => getActiveDogImages(disabledDogPacks),
+    [disabledDogPacks]
+  );
 
   // Fires exactly once per game: `won`/`lost` only flip true -> false again
   // when loadPuzzle() resets marks/mistakes for the next puzzle, so this
@@ -58,6 +75,22 @@ export default function App() {
   useEffect(() => {
     saveHardMode(hardMode);
   }, [hardMode]);
+
+  useEffect(() => {
+    saveDisabledDogPacks(disabledDogPacks);
+  }, [disabledDogPacks]);
+
+  // <dialog> is opened/closed imperatively (showModal()/close()), not via a
+  // prop, so this effect is what keeps it in sync with React state — both
+  // for our own "Dog packs" button and for native dismissal (Esc, or the
+  // backdrop click handled below), which fires the dialog's 'close' event
+  // rather than going through our click handler.
+  useEffect(() => {
+    const dialog = dogPackDialogRef.current;
+    if (!dialog) return;
+    if (showDogPackMenu && !dialog.open) dialog.showModal();
+    else if (!showDogPackMenu && dialog.open) dialog.close();
+  }, [showDogPackMenu]);
 
   const loadPuzzle = useCallback(async () => {
     setIsGenerating(true);
@@ -111,7 +144,7 @@ export default function App() {
         });
         setDogImages((prev) => {
           const next = prev.map((r) => [...r]);
-          next[row][col] = pickRandomDogImage();
+          next[row][col] = pickRandomDogImage(activeDogImages);
           return next;
         });
       } else {
@@ -124,8 +157,17 @@ export default function App() {
         }, WRONG_FLASH_MS);
       }
     },
-    [marks, puzzle, maxMistakes]
+    [marks, puzzle, maxMistakes, activeDogImages]
   );
+
+  const toggleDogPack = useCallback((name: string) => {
+    setDisabledDogPacks((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
 
   const setMark = useCallback((row: number, col: number, mark: CellMark) => {
     setMarks((prev) => {
@@ -195,6 +237,11 @@ export default function App() {
           <button type="button" className="app__button" onClick={() => loadPuzzle()} disabled={isGenerating}>
             New puzzle
           </button>
+          {DOG_PACKS.length > 0 && (
+            <button type="button" className="app__button" onClick={() => setShowDogPackMenu(true)}>
+              Dog packs
+            </button>
+          )}
         </div>
         {!hardModeLocked && (
           <label className="app__hard-mode">
@@ -209,7 +256,39 @@ export default function App() {
         )}
       </div>
 
-      <WinCelebration active={won && !isGenerating} />
+      <dialog
+        ref={dogPackDialogRef}
+        className="app__pack-dialog"
+        onClose={() => setShowDogPackMenu(false)}
+        onClick={(e) => {
+          if (e.target === dogPackDialogRef.current) setShowDogPackMenu(false);
+        }}
+      >
+        <h2>Dog packs</h2>
+        <p className="app__pack-dialog-hint">
+          Cutouts in the base set are always included. Turn packs off to exclude that dog's
+          photos from new finds.
+        </p>
+        <ul className="app__pack-list">
+          {DOG_PACKS.map((pack) => (
+            <li key={pack.name}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!disabledDogPacks.has(pack.name)}
+                  onChange={() => toggleDogPack(pack.name)}
+                />
+                {pack.name} ({pack.images.length})
+              </label>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="app__button" onClick={() => setShowDogPackMenu(false)}>
+          Done
+        </button>
+      </dialog>
+
+      <WinCelebration active={won && !isGenerating} images={activeDogImages} />
     </div>
   );
 }

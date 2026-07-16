@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { DOG_IMAGE_URLS } from '../game/dogImages';
 
 const SPRITE_COUNT = 22;
 const GRAVITY = 0.6; // px per frame^2, at a normalized 60fps step
@@ -43,19 +42,19 @@ function launch(sprite: Sprite | undefined, index: number): Sprite {
  * 60fps, re-rendering React for every frame would be wasteful and jittery.
  * React's only job here is to mount the pool once; the loop owns the rest.
  */
-export default function WinCelebration({ active }: { active: boolean }) {
+export default function WinCelebration({ active, images }: { active: boolean; images: string[] }) {
   const spriteElsRef = useRef<(HTMLImageElement | null)[]>([]);
   const spritesRef = useRef<Sprite[]>([]);
 
   useEffect(() => {
-    if (!active || DOG_IMAGE_URLS.length === 0) return;
+    if (!active || images.length === 0) return;
 
     spritesRef.current = Array.from({ length: SPRITE_COUNT }, (_, i) => launch(undefined, i));
 
     const timers: number[] = [];
     spriteElsRef.current.forEach((el, i) => {
       if (!el) return;
-      el.src = DOG_IMAGE_URLS[Math.floor(Math.random() * DOG_IMAGE_URLS.length)];
+      el.src = images[Math.floor(Math.random() * images.length)];
       // Stagger the initial appearance so they don't all pop in at once.
       el.style.opacity = '0';
       timers.push(
@@ -92,7 +91,7 @@ export default function WinCelebration({ active }: { active: boolean }) {
         if (offScreenSideways || settled) {
           spritesRef.current[i] = launch(s, i);
           const el = spriteElsRef.current[i];
-          if (el) el.src = DOG_IMAGE_URLS[Math.floor(Math.random() * DOG_IMAGE_URLS.length)];
+          if (el) el.src = images[Math.floor(Math.random() * images.length)];
         }
 
         const el = spriteElsRef.current[i];
@@ -111,9 +110,9 @@ export default function WinCelebration({ active }: { active: boolean }) {
       cancelAnimationFrame(rafId);
       timers.forEach((t) => window.clearTimeout(t));
     };
-  }, [active]);
+  }, [active, images]);
 
-  if (!active || DOG_IMAGE_URLS.length === 0) return null;
+  if (!active || images.length === 0) return null;
 
   return (
     <div className="win-celebration" aria-hidden="true">

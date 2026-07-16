@@ -9,9 +9,50 @@ const modules = import.meta.glob('../assets/dogs/cutouts/**/*.png', {
   import: 'default',
 }) as Record<string, string>;
 
-export const DOG_IMAGE_URLS: string[] = Object.values(modules);
+const CUTOUTS_PREFIX = '../assets/dogs/cutouts/';
 
-export function pickRandomDogImage(): string | null {
-  if (DOG_IMAGE_URLS.length === 0) return null;
-  return DOG_IMAGE_URLS[Math.floor(Math.random() * DOG_IMAGE_URLS.length)];
+export interface DogPack {
+  name: string;
+  images: string[];
+}
+
+// Cutouts directly in cutouts/ (e.g. dog1.png) are the baseline set, always
+// included in every game. Anything one level deeper (cutouts/<Name>/dogN.png)
+// is an optional "pack" named after its folder, toggleable in the dog pack
+// menu — the pack list is derived from whatever folders actually exist, so
+// adding or removing a cutouts/ subfolder needs no code change.
+const rootImages: string[] = [];
+const packsByName = new Map<string, string[]>();
+
+for (const [path, url] of Object.entries(modules)) {
+  const rest = path.slice(CUTOUTS_PREFIX.length);
+  const slash = rest.indexOf('/');
+  if (slash === -1) {
+    rootImages.push(url);
+  } else {
+    const packName = rest.slice(0, slash);
+    const list = packsByName.get(packName);
+    if (list) list.push(url);
+    else packsByName.set(packName, [url]);
+  }
+}
+
+export const ROOT_DOG_IMAGES: string[] = rootImages;
+
+export const DOG_PACKS: DogPack[] = Array.from(packsByName.entries())
+  .map(([name, images]) => ({ name, images }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+/** The root set plus every pack not present in `disabledPacks`. */
+export function getActiveDogImages(disabledPacks: ReadonlySet<string>): string[] {
+  const images = [...rootImages];
+  for (const pack of DOG_PACKS) {
+    if (!disabledPacks.has(pack.name)) images.push(...pack.images);
+  }
+  return images;
+}
+
+export function pickRandomDogImage(pool: string[]): string | null {
+  if (pool.length === 0) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
