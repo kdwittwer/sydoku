@@ -39,6 +39,11 @@ export default function App() {
   );
   const [showDogPackMenu, setShowDogPackMenu] = useState(false);
   const dogPackDialogRef = useRef<HTMLDialogElement>(null);
+  // Images already shown for a correct find this puzzle — pickRandomDogImage
+  // avoids repeats against this set as long as an unused image remains, so
+  // duplicates within a puzzle only happen when the active pool is smaller
+  // than the puzzle's dog count and repeats become unavoidable.
+  const [usedDogImages, setUsedDogImages] = useState<Set<string>>(new Set());
 
   const won = useMemo(() => (puzzle ? isWon(puzzle, marks) : false), [puzzle, marks]);
   const maxMistakes = hardMode ? HARD_MODE_MAX_MISTAKES : NORMAL_MAX_MISTAKES;
@@ -102,6 +107,7 @@ export default function App() {
       setDogImages(createEmptyDogImages(next.size));
       setMistakes(0);
       setWrongCell(null);
+      setUsedDogImages(new Set());
     } catch (err) {
       // Without this, a worker that fails to load or never responds (seen
       // on some Android browsers/WebViews) left the UI stuck showing
@@ -137,6 +143,7 @@ export default function App() {
       if (marks[row][col] === 'dog') return; // already correct — can't be undone
 
       if (puzzle.dogs[row][col]) {
+        const chosen = pickRandomDogImage(activeDogImages, usedDogImages);
         setMarks((prev) => {
           const next = prev.map((r) => [...r]);
           next[row][col] = 'dog';
@@ -144,9 +151,12 @@ export default function App() {
         });
         setDogImages((prev) => {
           const next = prev.map((r) => [...r]);
-          next[row][col] = pickRandomDogImage(activeDogImages);
+          next[row][col] = chosen;
           return next;
         });
+        if (chosen) {
+          setUsedDogImages((used) => new Set(used).add(chosen));
+        }
       } else {
         setMistakes((m) => Math.min(m + 1, maxMistakes));
         setWrongCell({ row, col });
@@ -157,7 +167,7 @@ export default function App() {
         }, WRONG_FLASH_MS);
       }
     },
-    [marks, puzzle, maxMistakes, activeDogImages]
+    [marks, puzzle, maxMistakes, activeDogImages, usedDogImages]
   );
 
   const toggleDogPack = useCallback((name: string) => {

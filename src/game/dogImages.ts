@@ -52,7 +52,17 @@ export function getActiveDogImages(disabledPacks: ReadonlySet<string>): string[]
   return images;
 }
 
-export function pickRandomDogImage(pool: string[]): string | null {
+/**
+ * Picks a random image from `pool`, avoiding anything already in
+ * `usedImages` (the images already shown elsewhere in the current puzzle)
+ * as long as an unused one is available. Once every pool image has been
+ * used — inherently the case once the pool is smaller than the puzzle's dog
+ * count — it falls back to the full pool, so duplicates only ever happen
+ * when they're unavoidable.
+ */
+export function pickRandomDogImage(pool: string[], usedImages: ReadonlySet<string>): string | null {
   if (pool.length === 0) return null;
-  return pool[Math.floor(Math.random() * pool.length)];
+  const unused = pool.filter((url) => !usedImages.has(url));
+  const candidates = unused.length > 0 ? unused : pool;
+  return candidates[Math.floor(Math.random() * candidates.length)];
 }
