@@ -17,8 +17,13 @@ dist-ssr
 __pycache__
 
 # Source dog photos are local-only — only their processed cutouts
-# (src/assets/dogs/cutouts/) are committed.
+# (src/assets/dogs/cutouts/) are committed. Covers both the flat layout
+# (src/assets/dogs/dogN.png) and per-dog subfolders (src/assets/dogs/<Name>/*.png);
+# cutouts/ is a subfolder too, so it needs its own explicit re-include.
 src/assets/dogs/*.png
+src/assets/dogs/*/*.png
+!src/assets/dogs/cutouts/*.png
+!src/assets/dogs/cutouts/*/*.png
 
 # Editor directories and files
 .vscode/*

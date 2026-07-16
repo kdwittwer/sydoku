@@ -2,9 +2,18 @@
 """Generate transparent-background head cutouts for every photo in
 src/assets/dogs/, writing results to src/assets/dogs/cutouts/.
 
-Re-run this whenever new photos are added to src/assets/dogs/ (named
-dogN.png) — it only processes files that don't already have a cutout, so
-it's safe to run repeatedly.
+Two source layouts are supported and can coexist:
+  - Flat: src/assets/dogs/dogN.png -> src/assets/dogs/cutouts/dogN.png
+  - Per-dog subfolders: src/assets/dogs/<Name>/*.png ->
+    src/assets/dogs/cutouts/<Name>/dogN.png, numbered 1..N in filename order
+    within that subfolder — independently of every other folder's numbering,
+    so each dog's cutouts always start at dog1.png.
+
+Re-run this whenever new photos are added — it only reprocesses a
+destination whose source is newer, so it's safe to run repeatedly. Note
+that within a subfolder, indices are assigned by sort order, so inserting
+a new photo ahead of existing ones (rather than appending it) will shift
+and reprocess everything after it.
 
 Setup (one-time):
     python3 -m venv .venv
@@ -56,6 +65,28 @@ def downscale(image: Image.Image) -> Image.Image:
     return image.resize(new_size, Image.LANCZOS)
 
 
+def process_group(sources: list[Path], dest_dir: Path, session) -> tuple[int, int]:
+    """Cuts out each source in order into dest_dir/dog1.png, dog2.png, ....
+    Returns (processed_count, total_count)."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    processed = 0
+    for i, src in enumerate(sources, start=1):
+        dest = dest_dir / f"dog{i}.png"
+        if dest.exists() and dest.stat().st_mtime >= src.stat().st_mtime:
+            print(f"skip (up to date): {src.relative_to(DOGS_DIR)}")
+            continue
+
+        print(f"processing: {src.relative_to(DOGS_DIR)} -> {dest.relative_to(DOGS_DIR)}")
+        with Image.open(src) as im:
+            im = im.convert("RGBA")
+            cutout = remove(im, session=session)
+        cutout = tight_crop(cutout)
+        cutout = downscale(cutout)
+        cutout.save(dest)
+        processed += 1
+    return processed, len(sources)
+
+
 def main() -> None:
     if not DOGS_DIR.exists():
         print(f"No such directory: {DOGS_DIR}", file=sys.stderr)
@@ -64,32 +95,36 @@ def main() -> None:
     CUTOUTS_DIR.mkdir(exist_ok=True)
     session = new_session("u2net")
 
-    sources = sorted(
+    total_processed = 0
+    total_sources = 0
+
+    # Flat dogN.png files directly in DOGS_DIR (the original layout).
+    flat_sources = sorted(
         DOGS_DIR.glob("dog*.png"),
         key=lambda p: int("".join(ch for ch in p.stem if ch.isdigit()) or 0),
     )
-    if not sources:
-        print(f"No dogN.png files found in {DOGS_DIR}")
+    if flat_sources:
+        processed, total = process_group(flat_sources, CUTOUTS_DIR, session)
+        total_processed += processed
+        total_sources += total
+
+    # Per-dog subfolders: every immediate subdirectory of DOGS_DIR other than
+    # cutouts/ itself is one dog's photo set, numbered 1..N by filename
+    # within that folder alone.
+    for subdir in sorted(p for p in DOGS_DIR.iterdir() if p.is_dir() and p.name != "cutouts"):
+        sources = sorted(subdir.glob("*.png"))
+        if not sources:
+            continue
+        dest_dir = CUTOUTS_DIR / subdir.name
+        processed, total = process_group(sources, dest_dir, session)
+        total_processed += processed
+        total_sources += total
+
+    if total_sources == 0:
+        print(f"No dog photos found in {DOGS_DIR}")
         return
 
-    processed = 0
-    for src in sources:
-        dest = CUTOUTS_DIR / src.name
-        if dest.exists() and dest.stat().st_mtime >= src.stat().st_mtime:
-            print(f"skip (up to date): {src.name}")
-            continue
-
-        print(f"processing: {src.name}")
-        with Image.open(src) as im:
-            im = im.convert("RGBA")
-            cutout = remove(im, session=session)
-        cutout = tight_crop(cutout)
-        cutout = downscale(cutout)
-        cutout.save(dest)
-        processed += 1
-        print(f"  -> {dest.relative_to(SCRIPT_DIR.parent)} ({cutout.width}x{cutout.height})")
-
-    print(f"\nDone. {processed} cutout(s) generated, {len(sources) - processed} already up to date.")
+    print(f"\nDone. {total_processed} cutout(s) generated, {total_sources - total_processed} already up to date.")
 
 
 if __name__ == "__main__":
