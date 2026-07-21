@@ -103,13 +103,6 @@
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
 }
 
-.cell-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  touch-action: none;
-}
-
 .cell {
   position: relative;
   width: 100%;
@@ -130,24 +123,6 @@
   font-size: clamp(14px, 3vw, 24px);
   line-height: 1;
   transition: filter 0.15s ease;
-}
-
-/* Real native switch control (see the Cell component doc comment) that has
-   to actually be touched — not just present in the DOM — for iOS to play
-   its haptic tick, so it's sized to cover the whole cell and sit on top for
-   hit-testing, just invisible. opacity (not visibility/display) is what
-   keeps it hit-testable while rendering nothing. */
-.cell__haptic-switch {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  border: none;
-  opacity: 0;
-  touch-action: none;
-  cursor: pointer;
 }
 
 .cell:hover:not(:disabled) {
