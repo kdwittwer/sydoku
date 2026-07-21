@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { vibrateTap } from '../game/haptics';
 import type { CellMark, Puzzle } from '../game/types';
 import Cell from './Cell';
 
@@ -91,6 +92,7 @@ export default function Grid({
     (row: number, col: number) => {
       if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
       clickTimerRef.current = window.setTimeout(() => {
+        vibrateTap();
         onToggleSafe(row, col);
         clickTimerRef.current = null;
       }, CLICK_DELAY_MS);
@@ -142,6 +144,7 @@ export default function Grid({
         window.clearTimeout(clickTimerRef.current);
         clickTimerRef.current = null;
       }
+      vibrateTap();
       onAttemptDog(row, col);
     },
     [onAttemptDog]
@@ -175,6 +178,7 @@ export default function Grid({
         const { row: sr, col: sc } = pendingClickRef.current;
         const startMark = marksRef.current[sr][sc];
         if (startMark !== 'dog' && startMark !== drag.paintMark) {
+          vibrateTap();
           onSetMark(sr, sc, drag.paintMark);
         }
         pendingClickRef.current = null;
@@ -182,6 +186,7 @@ export default function Grid({
 
       const mark = marksRef.current[cell.row][cell.col];
       if (mark !== 'dog' && mark !== drag.paintMark) {
+        vibrateTap();
         onSetMark(cell.row, cell.col, drag.paintMark);
       }
     }
