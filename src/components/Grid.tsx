@@ -47,6 +47,8 @@ interface DragState {
   paintMark: CellMark;
   visited: Set<number>;
   isDragging: boolean;
+  startRow: number;
+  startCol: number;
 }
 
 /**
@@ -79,12 +81,20 @@ export default function Grid({
   const dragStateRef = useRef<DragState | null>(null);
   const pendingClickRef = useRef<{ row: number; col: number } | null>(null);
   const clickTimerRef = useRef<number | null>(null);
-  // The one cell whose next click should be swallowed because a drag that
-  // just ended there already applied the mark — NOT a global "a drag just
+  // The cell(s) whose next click should be swallowed because a drag that
+  // just happened already applied their mark — NOT a global "a drag just
   // happened" flag, which would wrongly eat an unrelated later click (e.g.
   // a keyboard Enter on a different cell) if it fired before anything else
-  // reset it.
-  const suppressClickCellRef = useRef<{ row: number; col: number } | null>(null);
+  // reset it. This holds up to two cells rather than one: touch's ghost
+  // click after a drag can land on the cell the finger *released* over
+  // (resolved by coordinates below), but on iOS specifically it's sometimes
+  // instead dispatched targeting the cell the touch *started* on — per the
+  // touch event spec, a touchmove/touchend's target stays pinned to the
+  // original element for the whole gesture, and Safari's click synthesis
+  // can inherit that pinned target instead of the release position. Only
+  // suppressing the release cell left the start cell's mark exposed to that
+  // ghost click, which is what reverted it back to unmarked.
+  const suppressClickCellKeysRef = useRef<Set<number> | null>(null);
   const marksRef = useRef(marks);
   marksRef.current = marks;
 
@@ -102,7 +112,7 @@ export default function Grid({
 
   const handlePointerDownCell = useCallback(
     (row: number, col: number) => {
-      suppressClickCellRef.current = null;
+      suppressClickCellKeysRef.current = null;
       if (clickTimerRef.current !== null) {
         window.clearTimeout(clickTimerRef.current);
         clickTimerRef.current = null;
@@ -117,6 +127,8 @@ export default function Grid({
           paintMark: mark === 'empty' ? 'safe' : 'empty',
           visited: new Set([cellKey(row, col)]),
           isDragging: false,
+          startRow: row,
+          startCol: col,
         };
       }
     },
@@ -125,17 +137,18 @@ export default function Grid({
 
   const handleClickCell = useCallback(
     (row: number, col: number) => {
-      const suppress = suppressClickCellRef.current;
-      suppressClickCellRef.current = null; // one-shot, regardless of match
-      if (suppress && suppress.row === row && suppress.col === col) {
-        // A drag gesture that ended back on its starting cell still fires a
-        // native click (mousedown/mouseup targeted the same element) — the
-        // drag already applied the mark, so this click is a no-op.
+      const suppress = suppressClickCellKeysRef.current;
+      suppressClickCellKeysRef.current = null; // one-shot, regardless of match
+      if (suppress && suppress.has(cellKey(row, col))) {
+        // A drag gesture still fires a native click afterward, targeting
+        // either the cell the finger released over or (on iOS) the one it
+        // started on — the drag already applied whichever mark(s) it
+        // crossed, so this click is a no-op.
         return;
       }
       scheduleSingleClick(row, col);
     },
-    [scheduleSingleClick]
+    [scheduleSingleClick, cellKey]
   );
 
   const handleDoubleClickCell = useCallback(
@@ -192,10 +205,17 @@ export default function Grid({
     }
 
     function handlePointerUp(e: PointerEvent) {
-      const wasDragging = dragStateRef.current?.isDragging ?? false;
+      const drag = dragStateRef.current;
+      if (drag?.isDragging) {
+        const keys = new Set<number>([cellKey(drag.startRow, drag.startCol)]);
+        const released = resolveCellFromPoint(e.clientX, e.clientY);
+        if (released) keys.add(cellKey(released.row, released.col));
+        suppressClickCellKeysRef.current = keys;
+      } else {
+        suppressClickCellKeysRef.current = null;
+      }
       dragStateRef.current = null;
       pendingClickRef.current = null;
-      suppressClickCellRef.current = wasDragging ? resolveCellFromPoint(e.clientX, e.clientY) : null;
     }
 
     window.addEventListener('pointermove', handlePointerMove);
