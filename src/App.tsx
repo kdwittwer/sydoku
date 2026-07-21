@@ -39,8 +39,6 @@ export default function App() {
   );
   const [showDogPackMenu, setShowDogPackMenu] = useState(false);
   const dogPackDialogRef = useRef<HTMLDialogElement>(null);
-  const [showInstructions, setShowInstructions] = useState(false);
-  const instructionsDialogRef = useRef<HTMLDialogElement>(null);
   // Images already shown for a correct find this puzzle — pickRandomDogImage
   // avoids repeats against this set as long as an unused image remains, so
   // duplicates within a puzzle only happen when the active pool is smaller
@@ -98,13 +96,6 @@ export default function App() {
     if (showDogPackMenu && !dialog.open) dialog.showModal();
     else if (!showDogPackMenu && dialog.open) dialog.close();
   }, [showDogPackMenu]);
-
-  useEffect(() => {
-    const dialog = instructionsDialogRef.current;
-    if (!dialog) return;
-    if (showInstructions && !dialog.open) dialog.showModal();
-    else if (!showInstructions && dialog.open) dialog.close();
-  }, [showInstructions]);
 
   const loadPuzzle = useCallback(async () => {
     setIsGenerating(true);
@@ -201,6 +192,13 @@ export default function App() {
     <div className="app">
       <header className="app__header">
         <h1>Sydoku</h1>
+        <p>
+          Find all {STANDARD_SIZE} dogs — one per row, column, and section, none touching (even
+          diagonally). Click for safe, double-click for dog, drag to mark many at once.{' '}
+          {hardMode
+            ? 'Hard mode: one wrong guess and the puzzle is lost.'
+            : `${NORMAL_MAX_MISTAKES} wrong guesses and the puzzle's lost.`}
+        </p>
       </header>
 
       <div className="app__board">
@@ -249,9 +247,6 @@ export default function App() {
           <span className="app__stat app__stat--streak">Streak: {stats.currentStreak}</span>
         </p>
         <div className="app__actions">
-          <button type="button" className="app__button" onClick={() => setShowInstructions(true)}>
-            Instructions
-          </button>
           <button type="button" className="app__button" onClick={() => loadPuzzle()} disabled={isGenerating}>
             New puzzle
           </button>
@@ -274,36 +269,15 @@ export default function App() {
       </div>
 
       <dialog
-        ref={instructionsDialogRef}
-        className="app__dialog"
-        onClose={() => setShowInstructions(false)}
-        onClick={(e) => {
-          if (e.target === instructionsDialogRef.current) setShowInstructions(false);
-        }}
-      >
-        <h2>How to play</h2>
-        <p className="app__dialog-text">
-          Find all {STANDARD_SIZE} dogs — one per row, column, and section, none touching (even
-          diagonally). Click for safe, double-click for dog, drag to mark many at once.{' '}
-          {hardMode
-            ? 'Hard mode: one wrong guess and the puzzle is lost.'
-            : `${NORMAL_MAX_MISTAKES} wrong guesses and the puzzle's lost.`}
-        </p>
-        <button type="button" className="app__button" onClick={() => setShowInstructions(false)}>
-          Done
-        </button>
-      </dialog>
-
-      <dialog
         ref={dogPackDialogRef}
-        className="app__dialog"
+        className="app__pack-dialog"
         onClose={() => setShowDogPackMenu(false)}
         onClick={(e) => {
           if (e.target === dogPackDialogRef.current) setShowDogPackMenu(false);
         }}
       >
         <h2>Dog packs</h2>
-        <p className="app__dialog-text">
+        <p className="app__pack-dialog-hint">
           Play with only the dogs you care about. One picture of Syd is included, no matter what.
         </p>
         <ul className="app__pack-list">
